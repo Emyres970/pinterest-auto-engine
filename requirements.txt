@@ -1,5 +1,6 @@
-google-generative-ai
-playwright
-pandas
-requests
-beautifulsoup4
+google-genai>=1.0.0
+playwright>=1.44.0
+pandas>=2.0.0
+requests>=2.31.0
+beautifulsoup4>=4.12.0
+python-dotenv>=1.0.0

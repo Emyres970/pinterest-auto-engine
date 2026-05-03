@@ -1,0 +1,7 @@
+.env
+.pinterest_cookies.json
+output/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
