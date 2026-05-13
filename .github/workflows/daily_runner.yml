@@ -2,40 +2,46 @@ name: Pinterest Automation
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # Runs every 6 hours
-  workflow_dispatch: # Allows you to run it manually from the GitHub App
+    - cron: '0 8 * * *'   # Runs once daily at 8 AM UTC
+  workflow_dispatch:        # Manual trigger from GitHub UI
 
 permissions:
-  contents: write # Needed to save the updated CSV
+  contents: write
 
 jobs:
   run-automation:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.9'
+          python-version: '3.11'
 
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
           playwright install chromium
+          playwright install-deps chromium
 
-      - name: Run Automation Script
+      - name: Run automation
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          PINTEREST_ACCESS_TOKEN: ${{ secrets.PINTEREST_ACCESS_TOKEN }}
-          PINTEREST_BOARD_ID: ${{ secrets.PINTEREST_BOARD_ID }}
+          PINTEREST_EMAIL: ${{ secrets.PINTEREST_EMAIL }}
+          PINTEREST_PASSWORD: ${{ secrets.PINTEREST_PASSWORD }}
+          PINTEREST_BOARD_NAME: ${{ secrets.PINTEREST_BOARD_NAME }}
+          BRAND_NAME: ${{ secrets.BRAND_NAME }}
+          PINS_PER_DAY: 15
+          DELAY_BETWEEN_PINS: 300
         run: python main.py
 
-      - name: Commit and Push Changes (Update CSV)
+      - name: Commit tracker update
         run: |
-          git config --global user.name 'PinterestBot'
-          git config --global user.email 'bot@noreply.github.com'
-          git add content_log.csv
-          git commit -m "Update content log status" || echo "No changes to commit"
+          git config user.name 'PinterestBot'
+          git config user.email 'bot@noreply.github.com'
+          git add tracker.csv
+          git diff --staged --quiet || git commit -m "chore: update tracker $(date -u +%Y-%m-%d)"
           git push
