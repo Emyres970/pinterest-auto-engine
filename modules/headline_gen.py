@@ -148,21 +148,22 @@ def generate_headline(title: str, body: str, template_index: int = 0) -> dict:
     )
     log.info(f"  Template  : {template['name']}")
 
-    # Groq first — 14,400 free RPD, effectively unlimited for 15 pins/day
-    if os.getenv("GROQ_API_KEY"):
-        try:
-            return _try_groq(prompt)
-        except Exception as e:
-            log.warning(f"Groq failed — falling back to Gemini: {e}")
+    # Gemini first — stronger headline quality; at 15 pins/day we use ~1% of free RPM
+    if os.getenv("GEMINI_API_KEY"):
+        for attempt in range(3):
+            try:
+                return _try_gemini(prompt)
+            except Exception as e:
+                if "429" in str(e) and attempt < 2:
+                    wait = 60 * (attempt + 1)
+                    log.warning(f"Gemini rate limit — retrying in {wait}s")
+                    time.sleep(wait)
+                else:
+                    log.warning(f"Gemini failed — falling back to Groq: {e}")
+                    break
 
-    # Gemini fallback
-    for attempt in range(3):
-        try:
-            return _try_gemini(prompt)
-        except Exception as e:
-            if "429" in str(e) and attempt < 2:
-                wait = 60 * (attempt + 1)
-                log.warning(f"Gemini rate limit — retrying in {wait}s")
-                time.sleep(wait)
-            else:
-                raise
+    # Groq fallback
+    if os.getenv("GROQ_API_KEY"):
+        return _try_groq(prompt)
+
+    raise RuntimeError("No LLM available — set GEMINI_API_KEY or GROQ_API_KEY")
