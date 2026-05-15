@@ -27,9 +27,21 @@ jobs:
           playwright install chromium
           playwright install-deps chromium
 
+      - name: Restore Pinterest session cookies
+        run: |
+          if [ -n "$PINTEREST_COOKIES_B64" ]; then
+            echo "$PINTEREST_COOKIES_B64" | base64 -d > .pinterest_cookies.json
+            echo "Session cookies restored."
+          else
+            echo "No PINTEREST_COOKIES_B64 secret found — will log in fresh with email/password."
+          fi
+        env:
+          PINTEREST_COOKIES_B64: ${{ secrets.PINTEREST_COOKIES_B64 }}
+
       - name: Run automation
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           PINTEREST_EMAIL: ${{ secrets.PINTEREST_EMAIL }}
           PINTEREST_PASSWORD: ${{ secrets.PINTEREST_PASSWORD }}
           PINTEREST_BOARD_NAME: ${{ secrets.PINTEREST_BOARD_NAME }}
@@ -37,6 +49,15 @@ jobs:
           PINS_PER_DAY: 15
           DELAY_BETWEEN_PINS: 300
         run: python main.py
+
+      - name: Save updated cookies as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinterest-cookies-${{ github.run_number }}
+          path: .pinterest_cookies.json
+          retention-days: 35
+          if-no-files-found: ignore
 
       - name: Commit tracker update
         run: |
