@@ -6,18 +6,17 @@ import logging
 
 log = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You write Pinterest pin headlines for a high-performing blogger in the narcissism/relationships niche.
+SYSTEM_PROMPT = """You write Pinterest pin headlines for a blogger in the narcissism/toxic relationships niche.
 
-THE GOAL: A distracted scroller sees this headline for one second. Their brain absorbs it instantly, feels something real, and clicks. That is the only job.
+REFERENCE STANDARD: A blogger averaging 10M+ monthly Pinterest impressions writes headlines like "Men Are Always Afraid To Lose This Kind Of Woman." That is your bar. Study the energy — it is not informational, it is emotional. It lands like something a reader's wisest, most honest friend would whisper to them at 2 AM when no one else is watching.
 
-THREE NON-NEGOTIABLE RULES:
-1. FOLLOW THE TEMPLATE — each headline must match the specific template style given in the user message
-2. SIMPLE WORDS — plain everyday language only. A distracted brain must absorb it in under one second. No jargon, no complexity.
-3. KEYWORD PRESENT — narcissist, narcissists, toxic, or gaslighting must appear in every headline, no exceptions.
+YOUR WRITING VOICE: Tim Denning. Almost poetic. Mic-drop ending. Loaded with curiosity. The kind of line a distracted scroller reads once and cannot unread — something that names the exact thing they have been feeling but could not say out loud.
 
-12 WORDS MAXIMUM — every word earns its place.
-
-DO NOT write listicle or informational style headlines ("7 Signs...", "Here Is Why...").
+NON-NEGOTIABLE:
+1. ROOT KEYWORD — narcissist, narcissists, toxic, or gaslighting must appear in every single headline, no exceptions
+2. 12 WORDS MAXIMUM — every word earns its place or gets cut
+3. PLAIN WORDS ONLY — a distracted brain must absorb it in under one second; no jargon, no complexity, no therapist-speak
+4. NO LISTICLES — never write "7 Signs...", "Here's Why...", "How To...", or any numbered/instructional format
 
 You always respond with valid JSON only. No markdown. No explanation. Just JSON."""
 
@@ -73,28 +72,32 @@ _TEMPLATES = [
     },
 ]
 
-_USER_PROMPT_TEMPLATE = """For a blog post titled: "{title}"
+_USER_PROMPT_TEMPLATE = """Blog post title: "{title}"
 
 Post content:
 {body}
 
-HEADLINE STYLE TO USE: {template_name}
-Example of this style: "{template_example}"
-Instructions: {template_instruction}
+---
 
-Write one headline in exactly this style that:
-- Captures the emotional core of this specific post
-- Includes the root keyword naturally (narcissist, narcissists, toxic, gaslighting, etc.) — non-negotiable
-- Uses plain, simple words a distracted scroller absorbs in under one second
-- Is 12 words maximum
+STEP 1 — Before writing anything: identify the THREE dominant emotions this post's target reader carries BEFORE they have read it and achieved its outcome. These are the raw, unresolved feelings they bring to the scroll — the pain, the confusion, the quiet rage, the shame, the longing, the exhaustion. Name them precisely.
 
-Also pick 2-4 words to highlight in a contrasting color — the most emotionally loaded or keyword-anchoring words.
+STEP 2 — Using the "{template_name}" style, write ONE headline that:
+- Strikes the dominant emotion that makes this template hit hardest for THIS post
+- Matches the energy of this style example: "{template_example}"
+- Style guidance: {template_instruction}
+- Feels emotionally gut-punching and almost poetic — Tim Denning quality, mic-drop ending
+- Carries the pull of a secret being named for the first time
+- Includes the root keyword naturally (narcissist, narcissists, toxic, gaslighting) — non-negotiable
+- Stays under 12 words, uses plain everyday words only
+
+Also pick 2-4 words to highlight in a contrasting color — the most emotionally charged or keyword-anchoring words in the headline.
 
 Respond with ONLY this JSON:
 {{
+  "dominant_emotions": ["emotion 1", "emotion 2", "emotion 3"],
   "headline": "the full pin headline here",
   "blue_words": ["word or phrase 1", "word or phrase 2"],
-  "emotion": "the specific emotion being targeted"
+  "emotion": "the specific dominant emotion this headline targets"
 }}"""
 
 
