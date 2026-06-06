@@ -1,0 +1,764 @@
+<!-- ============================================================
+   EXPLICIT DUNGEON POLAND — Strona Główna (Homepage)
+   Wklej tę zawartość do nowej Strony Blogera (/p/strona-glowna.html)
+   Następnie przekieruj główną domenę na tę stronę.
+   ============================================================ -->
+
+<style>
+/* ---- Reset & Base ---- */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+.ed-page{font-family:'Poppins',sans-serif;background:#0d0d0d;color:#e8e8e8;line-height:1.6;overflow-x:hidden}
+.ed-page a{text-decoration:none;color:inherit}
+.ed-page img{max-width:100%;display:block}
+.ed-container{width:100%;max-width:1060px;margin:0 auto;padding:0 20px}
+
+/* ---- Accent colors ---- */
+:root{
+  --gold:#d4af37;
+  --gold-dark:#b8860b;
+  --black:#0d0d0d;
+  --surface:#141414;
+  --surface2:#1c1c1c;
+  --border:rgba(212,175,55,0.2);
+  --text:#e8e8e8;
+  --muted:#999}
+
+/* ---- Section shared ---- */
+.ed-section{padding:80px 0}
+.ed-section-title{font-size:32px;font-weight:700;color:var(--gold);text-align:center;margin-bottom:12px;letter-spacing:1px}
+.ed-section-sub{text-align:center;color:var(--muted);font-size:15px;margin-bottom:50px}
+.ed-divider{width:60px;height:3px;background:var(--gold);margin:16px auto 0;border-radius:2px}
+
+/* ---- HERO ---- */
+.ed-hero{
+  position:relative;
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  text-align:center;
+  background:
+    linear-gradient(to bottom, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.6) 100%),
+    url('https://images.unsplash.com/photo-1519671282429-b2d8fa63db60?w=1400&q=80') center/cover no-repeat;
+  overflow:hidden;
+  padding:120px 20px}
+.ed-hero::before{
+  content:'';
+  position:absolute;inset:0;
+  background:radial-gradient(ellipse at center, rgba(212,175,55,0.07) 0%, transparent 70%)}
+.ed-hero-badge{
+  display:inline-block;
+  background:var(--gold);
+  color:#000;
+  font-size:11px;font-weight:700;
+  letter-spacing:3px;text-transform:uppercase;
+  padding:6px 18px;border-radius:2px;
+  margin-bottom:28px}
+.ed-hero-title{
+  font-size:clamp(38px,7vw,72px);
+  font-weight:900;
+  color:#fff;
+  line-height:1.1;
+  margin-bottom:24px;
+  text-shadow:0 2px 20px rgba(0,0,0,0.5)}
+.ed-hero-title span{color:var(--gold)}
+.ed-hero-desc{
+  font-size:18px;
+  color:rgba(255,255,255,0.8);
+  max-width:620px;
+  margin:0 auto 40px}
+.ed-hero-btns{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+.ed-btn{
+  display:inline-flex;align-items:center;gap:10px;
+  padding:16px 36px;font-size:15px;font-weight:600;
+  border-radius:3px;cursor:pointer;
+  transition:all .25s ease;letter-spacing:.5px}
+.ed-btn-primary{background:var(--gold);color:#000;border:2px solid var(--gold)}
+.ed-btn-primary:hover{background:var(--gold-dark);border-color:var(--gold-dark);transform:translateY(-2px)}
+.ed-btn-outline{background:transparent;color:#fff;border:2px solid rgba(255,255,255,0.5)}
+.ed-btn-outline:hover{border-color:var(--gold);color:var(--gold);transform:translateY(-2px)}
+.ed-hero-scroll{
+  position:absolute;bottom:30px;left:50%;transform:translateX(-50%);
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  color:rgba(255,255,255,0.4);font-size:12px;letter-spacing:2px;text-transform:uppercase}
+.ed-hero-scroll span{width:1px;height:40px;background:linear-gradient(to bottom,rgba(212,175,55,0.6),transparent)}
+
+/* ---- RIBBON (Dyskrecja) ---- */
+.ed-ribbon{
+  background:var(--gold);
+  padding:18px 0;
+  overflow:hidden}
+.ed-ribbon-track{
+  display:flex;gap:60px;
+  animation:tickerScroll 25s linear infinite;
+  white-space:nowrap;width:max-content}
+.ed-ribbon-item{
+  display:flex;align-items:center;gap:10px;
+  font-size:13px;font-weight:700;
+  color:#000;text-transform:uppercase;letter-spacing:1px}
+.ed-ribbon-item i{font-size:14px}
+@keyframes tickerScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* ---- PILLARS ---- */
+.ed-pillars{background:var(--surface)}
+.ed-pillars-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:30px}
+.ed-pillar{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:36px 28px;
+  text-align:center;
+  transition:transform .2s,border-color .2s}
+.ed-pillar:hover{transform:translateY(-4px);border-color:var(--gold)}
+.ed-pillar-icon{
+  width:62px;height:62px;
+  background:rgba(212,175,55,0.1);
+  border:1px solid var(--border);
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 20px;
+  font-size:24px;color:var(--gold)}
+.ed-pillar h3{font-size:17px;font-weight:700;color:#fff;margin-bottom:10px}
+.ed-pillar p{font-size:14px;color:var(--muted);line-height:1.7}
+
+/* ---- SERVICES ---- */
+.ed-services{background:var(--black)}
+.ed-services-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+  gap:28px}
+.ed-service-card{
+  position:relative;
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:4px;
+  overflow:hidden;
+  transition:transform .25s,box-shadow .25s}
+.ed-service-card:hover{transform:translateY(-6px);box-shadow:0 12px 40px rgba(212,175,55,0.15)}
+.ed-service-thumb{
+  height:200px;
+  background:linear-gradient(135deg,#1a1a1a 0%,#2a2a2a 100%);
+  display:flex;align-items:center;justify-content:center;
+  font-size:52px;
+  position:relative;overflow:hidden}
+.ed-service-thumb::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(to top,rgba(0,0,0,0.8) 0%,transparent 60%)}
+.ed-service-tag{
+  position:absolute;top:16px;right:16px;
+  background:var(--gold);color:#000;
+  font-size:10px;font-weight:700;letter-spacing:2px;
+  padding:4px 10px;border-radius:2px;text-transform:uppercase;
+  z-index:2}
+.ed-service-body{padding:24px}
+.ed-service-body h3{
+  font-size:19px;font-weight:700;
+  color:#fff;margin-bottom:10px}
+.ed-service-body p{
+  font-size:14px;color:var(--muted);
+  line-height:1.7;margin-bottom:20px}
+.ed-service-link{
+  display:inline-flex;align-items:center;gap:8px;
+  font-size:13px;font-weight:600;
+  color:var(--gold);letter-spacing:.5px;
+  transition:gap .2s}
+.ed-service-link:hover{gap:14px}
+
+/* ---- HOW IT WORKS ---- */
+.ed-how{background:var(--surface)}
+.ed-steps{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+  gap:0;
+  position:relative}
+.ed-steps::before{
+  content:'';
+  position:absolute;top:36px;left:10%;right:10%;height:1px;
+  background:linear-gradient(90deg,transparent,var(--gold),transparent);
+  display:none}
+@media(min-width:768px){.ed-steps::before{display:block}}
+.ed-step{text-align:center;padding:24px 16px;position:relative}
+.ed-step-num{
+  width:72px;height:72px;
+  background:var(--surface2);
+  border:2px solid var(--gold);
+  border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  margin:0 auto 20px;
+  font-size:26px;font-weight:900;color:var(--gold);
+  position:relative;z-index:1}
+.ed-step h4{font-size:16px;font-weight:700;color:#fff;margin-bottom:8px}
+.ed-step p{font-size:13px;color:var(--muted);line-height:1.6}
+
+/* ---- GALLERY ---- */
+.ed-gallery{background:var(--black)}
+.ed-gallery-grid{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  grid-template-rows:repeat(2,200px);
+  gap:6px}
+.ed-gallery-item{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:3px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:13px;color:var(--muted);
+  font-style:italic;
+  overflow:hidden;
+  position:relative}
+.ed-gallery-item:first-child{
+  grid-column:1/3;grid-row:1/3}
+.ed-gallery-item-inner{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;
+  background:rgba(212,175,55,0.04);
+  color:rgba(212,175,55,0.35);
+  font-style:normal;font-size:12px;letter-spacing:1px;text-transform:uppercase}
+.ed-gallery-item-inner i{font-size:28px}
+.ed-gallery-note{
+  text-align:center;margin-top:24px;
+  font-size:13px;color:var(--muted)}
+.ed-gallery-note a{color:var(--gold);font-weight:600}
+
+/* ---- TESTIMONIALS ---- */
+.ed-testimonials{background:var(--surface)}
+.ed-testi-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:24px}
+.ed-testi{
+  background:var(--surface2);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:30px;
+  position:relative}
+.ed-testi::before{
+  content:'"';
+  position:absolute;top:14px;right:20px;
+  font-size:72px;font-weight:900;color:rgba(212,175,55,0.08);
+  line-height:1}
+.ed-testi-stars{color:var(--gold);font-size:13px;margin-bottom:14px;letter-spacing:2px}
+.ed-testi p{font-size:14px;color:var(--muted);line-height:1.8;margin-bottom:18px;font-style:italic}
+.ed-testi-author{font-size:13px;font-weight:700;color:#fff}
+.ed-testi-author span{color:var(--muted);font-weight:400}
+
+/* ---- CONTACT / BOOKING ---- */
+.ed-contact{
+  background:
+    linear-gradient(to bottom,rgba(0,0,0,0.9) 0%,rgba(0,0,0,0.85) 100%),
+    url('https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1400&q=80') center/cover no-repeat fixed}
+.ed-contact-wrap{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:60px;
+  align-items:start}
+@media(max-width:768px){.ed-contact-wrap{grid-template-columns:1fr;gap:40px}}
+.ed-contact-info h2{
+  font-size:34px;font-weight:800;color:#fff;
+  margin-bottom:16px;line-height:1.2}
+.ed-contact-info h2 span{color:var(--gold)}
+.ed-contact-info p{font-size:15px;color:rgba(255,255,255,0.7);margin-bottom:30px;line-height:1.8}
+.ed-contact-details{display:flex;flex-direction:column;gap:16px}
+.ed-contact-item{
+  display:flex;align-items:center;gap:14px;
+  padding:14px 18px;
+  background:rgba(255,255,255,0.04);
+  border:1px solid var(--border);
+  border-radius:4px}
+.ed-contact-item i{color:var(--gold);font-size:18px;width:22px;text-align:center}
+.ed-contact-item div{display:flex;flex-direction:column;gap:2px}
+.ed-contact-item span:first-child{font-size:11px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted)}
+.ed-contact-item a,.ed-contact-item strong{font-size:15px;color:#fff;font-weight:500}
+.ed-contact-item a:hover{color:var(--gold)}
+.ed-booking-box{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:40px;
+  box-shadow:0 0 60px rgba(0,0,0,0.4)}
+.ed-booking-box h3{
+  font-size:22px;font-weight:700;color:#fff;
+  margin-bottom:6px}
+.ed-booking-box p{font-size:14px;color:var(--muted);margin-bottom:28px}
+.ed-wa-btn{
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  background:#25D366;color:#fff;
+  padding:18px 24px;border-radius:4px;
+  font-size:17px;font-weight:700;
+  width:100%;margin-bottom:16px;
+  transition:background .2s,transform .2s}
+.ed-wa-btn:hover{background:#1ebe5d;transform:translateY(-2px);color:#fff}
+.ed-wa-btn i{font-size:22px}
+.ed-booking-note{
+  font-size:12px;color:var(--muted);
+  text-align:center;line-height:1.6}
+.ed-booking-divider{
+  display:flex;align-items:center;gap:12px;
+  margin:20px 0;color:var(--muted);font-size:12px}
+.ed-booking-divider::before,.ed-booking-divider::after{
+  content:'';flex:1;height:1px;
+  background:var(--border)}
+.ed-rules-box{
+  margin-top:24px;
+  background:rgba(212,175,55,0.04);
+  border:1px solid var(--border);
+  border-radius:4px;
+  padding:20px}
+.ed-rules-box h4{font-size:13px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.ed-rules-box ul{list-style:none;display:flex;flex-direction:column;gap:8px}
+.ed-rules-box li{font-size:13px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.ed-rules-box li::before{content:'✓';color:var(--gold);font-weight:700}
+
+/* ---- FOOTER ---- */
+.ed-footer{
+  background:#080808;
+  padding:48px 0 24px;
+  border-top:1px solid var(--border)}
+.ed-footer-top{
+  display:flex;gap:40px;flex-wrap:wrap;
+  justify-content:space-between;
+  margin-bottom:40px}
+.ed-footer-brand{max-width:280px}
+.ed-footer-logo{
+  font-size:22px;font-weight:900;color:#fff;
+  margin-bottom:14px;letter-spacing:1px}
+.ed-footer-logo span{color:var(--gold)}
+.ed-footer-brand p{font-size:13px;color:var(--muted);line-height:1.7}
+.ed-footer-col h4{
+  font-size:12px;font-weight:700;color:var(--gold);
+  text-transform:uppercase;letter-spacing:2px;
+  margin-bottom:16px}
+.ed-footer-col ul{display:flex;flex-direction:column;gap:10px}
+.ed-footer-col li a{font-size:14px;color:var(--muted);transition:color .2s}
+.ed-footer-col li a:hover{color:var(--gold)}
+.ed-footer-bottom{
+  border-top:1px solid rgba(255,255,255,0.06);
+  padding-top:24px;
+  display:flex;justify-content:space-between;align-items:center;
+  flex-wrap:wrap;gap:12px}
+.ed-footer-bottom p{font-size:12px;color:rgba(255,255,255,0.3)}
+.ed-footer-bottom a{color:var(--gold)}
+.ed-age-badge{
+  display:inline-flex;align-items:center;gap:6px;
+  background:rgba(212,175,55,0.1);
+  border:1px solid var(--border);
+  color:var(--gold);
+  font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+  padding:6px 14px;border-radius:2px}
+
+/* ---- Responsive ---- */
+@media(max-width:600px){
+  .ed-section{padding:56px 0}
+  .ed-gallery-grid{grid-template-columns:1fr 1fr;grid-template-rows:auto}
+  .ed-gallery-item:first-child{grid-column:1/3;grid-row:auto}
+  .ed-booking-box{padding:28px 20px}}
+</style>
+
+<div class="ed-page">
+
+  <!-- ═══════════════════════════════════════════
+       HERO
+  ══════════════════════════════════════════════ -->
+  <section class="ed-hero">
+    <div style="position:relative;z-index:1;max-width:780px">
+      <div class="ed-hero-badge">&#128274; Dyskrecja Gwarantowana &nbsp;|&nbsp; Tylko dla Dorosłych 18+</div>
+      <h1 class="ed-hero-title">
+        Ekskluzywne Doznania<br>
+        w <span>Explicit Dungeon</span> Poland
+      </h1>
+      <p class="ed-hero-desc">
+        Profesjonalna i bezpieczna przestrzeń BDSM dla oświeconych dorosłych.
+        Dyskrecja, zaufanie i intensywne przeżycia — na Twoich warunkach.
+      </p>
+      <div class="ed-hero-btns">
+        <a class="ed-btn ed-btn-primary" href="/p/rezerwacja.html">
+          <i class="fas fa-calendar-alt"></i> Zarezerwuj Sesję
+        </a>
+        <a class="ed-btn ed-btn-outline" href="/p/o-nas.html">
+          <i class="fas fa-info-circle"></i> Dowiedz się więcej
+        </a>
+      </div>
+    </div>
+    <div class="ed-hero-scroll">
+      <span></span>
+      Przewiń
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       RIBBON
+  ══════════════════════════════════════════════ -->
+  <div class="ed-ribbon">
+    <div class="ed-ribbon-track">
+      <!-- repeated for infinite loop -->
+      <div class="ed-ribbon-item"><i class="fas fa-shield-alt"></i> 100% Dyskrecja</div>
+      <div class="ed-ribbon-item"><i class="fas fa-lock"></i> Bezpieczna Przestrzeń</div>
+      <div class="ed-ribbon-item"><i class="fas fa-star"></i> Doświadczeni Profesjonaliści</div>
+      <div class="ed-ribbon-item"><i class="fas fa-map-marker-alt"></i> Polska</div>
+      <div class="ed-ribbon-item"><i class="fas fa-user-check"></i> Tylko dla Dorosłych 18+</div>
+      <div class="ed-ribbon-item"><i class="fas fa-calendar-check"></i> Rezerwacja Online</div>
+      <div class="ed-ribbon-item"><i class="fas fa-gem"></i> Ekskluzywne Sesje</div>
+      <div class="ed-ribbon-item"><i class="fas fa-heart"></i> SSC &amp; RACK</div>
+      <!-- duplicate for seamless loop -->
+      <div class="ed-ribbon-item"><i class="fas fa-shield-alt"></i> 100% Dyskrecja</div>
+      <div class="ed-ribbon-item"><i class="fas fa-lock"></i> Bezpieczna Przestrzeń</div>
+      <div class="ed-ribbon-item"><i class="fas fa-star"></i> Doświadczeni Profesjonaliści</div>
+      <div class="ed-ribbon-item"><i class="fas fa-map-marker-alt"></i> Polska</div>
+      <div class="ed-ribbon-item"><i class="fas fa-user-check"></i> Tylko dla Dorosłych 18+</div>
+      <div class="ed-ribbon-item"><i class="fas fa-calendar-check"></i> Rezerwacja Online</div>
+      <div class="ed-ribbon-item"><i class="fas fa-gem"></i> Ekskluzywne Sesje</div>
+      <div class="ed-ribbon-item"><i class="fas fa-heart"></i> SSC &amp; RACK</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════
+       FILARY (Why us)
+  ══════════════════════════════════════════════ -->
+  <section class="ed-section ed-pillars">
+    <div class="ed-container">
+      <h2 class="ed-section-title">Dlaczego My?</h2>
+      <p class="ed-section-sub">Cztery filary, na których budujemy każdą sesję</p>
+      <div class="ed-divider" style="margin-bottom:50px"></div>
+      <div class="ed-pillars-grid">
+        <div class="ed-pillar">
+          <div class="ed-pillar-icon"><i class="fas fa-user-secret"></i></div>
+          <h3>Absolutna Dyskrecja</h3>
+          <p>Twoja prywatność jest dla nas najważniejsza. Żadnych danych, żadnych śladów — tylko Ty i Twoje doświadczenie.</p>
+        </div>
+        <div class="ed-pillar">
+          <div class="ed-pillar-icon"><i class="fas fa-shield-virus"></i></div>
+          <h3>Bezpieczeństwo</h3>
+          <p>Wszystkie sesje odbywają się według zasad SSC (Sane, Safe, Consensual). Twoje bezpieczeństwo jest naszym priorytetem.</p>
+        </div>
+        <div class="ed-pillar">
+          <div class="ed-pillar-icon"><i class="fas fa-award"></i></div>
+          <h3>Profesjonalizm</h3>
+          <p>Wieloletnie doświadczenie, przeszkoleni prowadzący i starannie dobrane wyposażenie klasy premium.</p>
+        </div>
+        <div class="ed-pillar">
+          <div class="ed-pillar-icon"><i class="fas fa-sliders-h"></i></div>
+          <h3>Personalizacja</h3>
+          <p>Każda sesja projektowana indywidualnie. Twoje granice, Twoje pragnienia, Twoje zasady — zawsze respektowane.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       SERVICES
+  ══════════════════════════════════════════════ -->
+  <section class="ed-section ed-services">
+    <div class="ed-container">
+      <h2 class="ed-section-title">Nasze Usługi</h2>
+      <p class="ed-section-sub">Ekskluzywne doświadczenia dostosowane do każdego poziomu zaawansowania</p>
+      <div class="ed-divider" style="margin-bottom:50px"></div>
+      <div class="ed-services-grid">
+
+        <div class="ed-service-card">
+          <div class="ed-service-thumb" style="background:linear-gradient(135deg,#1a0a0a,#2d1515)">
+            ⛓️
+            <div class="ed-service-tag">Popularne</div>
+          </div>
+          <div class="ed-service-body">
+            <h3>Sesja Dominacji</h3>
+            <p>Głęboka sesja z doświadczonym Dominującym/Dominującą. Całkowite poddanie się w bezpiecznych, uzgodnionych ramach.</p>
+            <a class="ed-service-link" href="/p/rezerwacja.html">Zarezerwuj <i class="fas fa-arrow-right"></i></a>
+          </div>
+        </div>
+
+        <div class="ed-service-card">
+          <div class="ed-service-thumb" style="background:linear-gradient(135deg,#0a100a,#152515)">
+            🪢
+          </div>
+          <div class="ed-service-body">
+            <h3>Shibari &amp; Bondage</h3>
+            <p>Artystyczne wiązanie, od podstaw po zaawansowane techniki. Sesje prowadzone przez certyfikowanych riggerów.</p>
+            <a class="ed-service-link" href="/p/rezerwacja.html">Zarezerwuj <i class="fas fa-arrow-right"></i></a>
+          </div>
+        </div>
+
+        <div class="ed-service-card">
+          <div class="ed-service-thumb" style="background:linear-gradient(135deg,#0d0a1a,#1e1535)">
+            🕯️
+            <div class="ed-service-tag">Nowość</div>
+          </div>
+          <div class="ed-service-body">
+            <h3>Sesja Sensoryczna</h3>
+            <p>Gra ze zmysłami — ciepło wosku, zimno lodu, dotyk różnych faktur. Idealna dla początkujących.</p>
+            <a class="ed-service-link" href="/p/rezerwacja.html">Zarezerwuj <i class="fas fa-arrow-right"></i></a>
+          </div>
+        </div>
+
+        <div class="ed-service-card">
+          <div class="ed-service-thumb" style="background:linear-gradient(135deg,#1a120a,#2d2015)">
+            🎭
+          </div>
+          <div class="ed-service-body">
+            <h3>Odgrywanie Ról (RPG)</h3>
+            <p>Immersyjne scenariusze w pełnym kostiumie — od klasycznych po zaawansowane narracje D/s.</p>
+            <a class="ed-service-link" href="/p/rezerwacja.html">Zarezerwuj <i class="fas fa-arrow-right"></i></a>
+          </div>
+        </div>
+
+        <div class="ed-service-card">
+          <div class="ed-service-thumb" style="background:linear-gradient(135deg,#0a0a1a,#101530)">
+            🤝
+          </div>
+          <div class="ed-service-body">
+            <h3>Sesja Odkrywcza</h3>
+            <p>Dla zupełnie nowych. Bezpieczna rozmowa, prezentacja dungeonu i łagodne wprowadzenie bez żadnej presji.</p>
+            <a class="ed-service-link" href="/p/rezerwacja.html">Zarezerwuj <i class="fas fa-arrow-right"></i></a>
+          </div>
+        </div>
+
+        <div class="ed-service-card">
+          <div class="ed-service-thumb" style="background:linear-gradient(135deg,#1a0a14,#301525)">
+            💎
+            <div class="ed-service-tag">Premium</div>
+          </div>
+          <div class="ed-service-body">
+            <h3>Sesja VIP</h3>
+            <p>Pełna prywatność, czas bez limitu, niestandardowy scenariusz zaprojektowany wyłącznie dla Ciebie.</p>
+            <a class="ed-service-link" href="/p/rezerwacja.html">Zarezerwuj <i class="fas fa-arrow-right"></i></a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       HOW IT WORKS
+  ══════════════════════════════════════════════ -->
+  <section class="ed-section ed-how">
+    <div class="ed-container">
+      <h2 class="ed-section-title">Jak Zacząć?</h2>
+      <p class="ed-section-sub">Cztery proste kroki do Twojego pierwszego doświadczenia</p>
+      <div class="ed-divider" style="margin-bottom:50px"></div>
+      <div class="ed-steps">
+        <div class="ed-step">
+          <div class="ed-step-num">1</div>
+          <h4>Kontakt</h4>
+          <p>Skontaktuj się z nami przez WhatsApp lub formularz. Wszystkie wiadomości są poufne.</p>
+        </div>
+        <div class="ed-step">
+          <div class="ed-step-num">2</div>
+          <h4>Konsultacja</h4>
+          <p>Bezpłatna, anonimowa rozmowa o Twoich oczekiwaniach, granicach i pytaniach.</p>
+        </div>
+        <div class="ed-step">
+          <div class="ed-step-num">3</div>
+          <h4>Rezerwacja</h4>
+          <p>Wybieramy termin, omawiamy szczegóły i ustalamy scenariusz na Twoją sesję.</p>
+        </div>
+        <div class="ed-step">
+          <div class="ed-step-num">4</div>
+          <h4>Doświadczenie</h4>
+          <p>Przyjeżdżasz, czujesz się bezpiecznie i przeżywasz coś, o czym nie zapomnisz.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       GALLERY
+  ══════════════════════════════════════════════ -->
+  <section class="ed-section ed-gallery">
+    <div class="ed-container">
+      <h2 class="ed-section-title">Dungeon &amp; Wyposażenie</h2>
+      <p class="ed-section-sub">Starannie wyposażona, prywatna przestrzeń dla najwyższych doznań</p>
+      <div class="ed-divider" style="margin-bottom:50px"></div>
+      <div class="ed-gallery-grid">
+        <div class="ed-gallery-item">
+          <div class="ed-gallery-item-inner">
+            <i class="fas fa-image"></i>
+            <span>Główna sala dungeonowa</span>
+          </div>
+        </div>
+        <div class="ed-gallery-item">
+          <div class="ed-gallery-item-inner">
+            <i class="fas fa-image"></i>
+            <span>Wyposażenie bondage</span>
+          </div>
+        </div>
+        <div class="ed-gallery-item">
+          <div class="ed-gallery-item-inner">
+            <i class="fas fa-image"></i>
+            <span>Strefa sensoryczna</span>
+          </div>
+        </div>
+        <div class="ed-gallery-item">
+          <div class="ed-gallery-item-inner">
+            <i class="fas fa-image"></i>
+            <span>Pokój prywatny</span>
+          </div>
+        </div>
+        <div class="ed-gallery-item">
+          <div class="ed-gallery-item-inner">
+            <i class="fas fa-image"></i>
+            <span>Strefa relaksu</span>
+          </div>
+        </div>
+      </div>
+      <p class="ed-gallery-note" style="margin-top:24px">
+        <i class="fas fa-lock" style="color:var(--gold)"></i>
+        Więcej zdjęć dostępnych po kontakcie — ze względu na Twoją prywatność.
+        <a href="/p/rezerwacja.html"> Skontaktuj się z nami →</a>
+      </p>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       TESTIMONIALS
+  ══════════════════════════════════════════════ -->
+  <section class="ed-section ed-testimonials">
+    <div class="ed-container">
+      <h2 class="ed-section-title">Co Mówią Klienci</h2>
+      <p class="ed-section-sub">Opinie ze względu na poufność są anonimowe</p>
+      <div class="ed-divider" style="margin-bottom:50px"></div>
+      <div class="ed-testi-grid">
+        <div class="ed-testi">
+          <div class="ed-testi-stars">★★★★★</div>
+          <p>Profesjonalizm na najwyższym poziomie. Czułem się bezpiecznie od pierwszej chwili. Sesja przekroczyła wszystkie moje oczekiwania.</p>
+          <div class="ed-testi-author">Anonimowy klient <span>— Warszawa</span></div>
+        </div>
+        <div class="ed-testi">
+          <div class="ed-testi-stars">★★★★★</div>
+          <p>Byłam bardzo zestresowana przed pierwszą wizytą, ale opieka i wyjaśnienia rozwiały wszystkie obawy. Wróciłam trzy razy!</p>
+          <div class="ed-testi-author">Anonimowa klientka <span>— Kraków</span></div>
+        </div>
+        <div class="ed-testi">
+          <div class="ed-testi-stars">★★★★★</div>
+          <p>Naprawdę wyjątkowe miejsce. Wyposażenie klasy premium, absolutna dyskrecja. Polecam każdemu, kto szuka autentycznych przeżyć.</p>
+          <div class="ed-testi-author">Anonimowy klient <span>— Wrocław</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       CONTACT & BOOKING
+  ══════════════════════════════════════════════ -->
+  <section class="ed-section ed-contact" id="kontakt">
+    <div class="ed-container">
+      <div class="ed-contact-wrap">
+
+        <div class="ed-contact-info">
+          <h2>Gotowy na <span>Doświadczenie</span>?</h2>
+          <p>Skontaktuj się z nami poufnie. Odpowiadamy w ciągu 24 godzin. Wszystkie wiadomości są szyfrowane i nie są przechowywane.</p>
+          <div class="ed-contact-details">
+            <div class="ed-contact-item">
+              <i class="fab fa-whatsapp"></i>
+              <div>
+                <span>WhatsApp (preferowany)</span>
+                <a href="https://wa.me/TWÓJ_NUMER">+48 XXX XXX XXX</a>
+              </div>
+            </div>
+            <div class="ed-contact-item">
+              <i class="fas fa-envelope"></i>
+              <div>
+                <span>Email</span>
+                <a href="mailto:kontakt@explicitdungeon.pl">kontakt@explicitdungeon.pl</a>
+              </div>
+            </div>
+            <div class="ed-contact-item">
+              <i class="fas fa-map-marker-alt"></i>
+              <div>
+                <span>Lokalizacja</span>
+                <strong>Polska — dokładny adres po rezerwacji</strong>
+              </div>
+            </div>
+            <div class="ed-contact-item">
+              <i class="fas fa-clock"></i>
+              <div>
+                <span>Godziny przyjęć</span>
+                <strong>Pon–Niedz: 10:00 – 23:00</strong>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="ed-booking-box">
+            <h3>Zarezerwuj Sesję</h3>
+            <p>Szybka i dyskretna rezerwacja przez WhatsApp</p>
+            <a class="ed-wa-btn" href="https://wa.me/TWÓJ_NUMER?text=Chciałbym%2Fam%20zarezerwować%20sesję" target="_blank" rel="noopener noreferrer">
+              <i class="fab fa-whatsapp"></i>
+              Napisz na WhatsApp
+            </a>
+            <div class="ed-booking-divider">lub</div>
+            <a class="ed-btn ed-btn-primary" href="/p/rezerwacja.html" style="width:100%;justify-content:center">
+              <i class="fas fa-calendar-alt"></i> Formularz Rezerwacji
+            </a>
+            <div class="ed-rules-box" style="margin-top:24px">
+              <h4>Przed sesją pamiętaj</h4>
+              <ul>
+                <li>Musisz mieć ukończone 18 lat</li>
+                <li>Zapoznaj się z zasadami SSC</li>
+                <li>Przeczytaj <a href="/p/zasady.html" style="color:var(--gold)">nasze zasady i etykietę</a></li>
+                <li>Wymagany jest depozyt przy rezerwacji</li>
+              </ul>
+            </div>
+          </div>
+          <p class="ed-booking-note" style="margin-top:16px">
+            <i class="fas fa-lock" style="color:var(--gold)"></i>
+            Twoje dane są w 100% bezpieczne. Nie udostępniamy żadnych informacji osobom trzecim.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════
+       FOOTER
+  ══════════════════════════════════════════════ -->
+  <footer class="ed-footer">
+    <div class="ed-container">
+      <div class="ed-footer-top">
+        <div class="ed-footer-brand">
+          <div class="ed-footer-logo">Explicit <span>Dungeon</span> Poland</div>
+          <p>Ekskluzywna, bezpieczna i dyskretna przestrzeń BDSM w Polsce. Dla oświeconych dorosłych.</p>
+        </div>
+        <div class="ed-footer-col">
+          <h4>Nawigacja</h4>
+          <ul>
+            <li><a href="/">Strona Główna</a></li>
+            <li><a href="/p/o-nas.html">O Nas</a></li>
+            <li><a href="/p/zasady.html">Zasady i Etykieta</a></li>
+            <li><a href="/p/rezerwacja.html">Zarezerwuj Sesję</a></li>
+          </ul>
+        </div>
+        <div class="ed-footer-col">
+          <h4>Informacje</h4>
+          <ul>
+            <li><a href="/p/polityka-prywatnosci.html">Polityka Prywatności</a></li>
+            <li><a href="/p/regulamin.html">Regulamin</a></li>
+            <li><a href="/p/faq.html">FAQ</a></li>
+            <li><a href="#kontakt">Kontakt</a></li>
+          </ul>
+        </div>
+        <div class="ed-footer-col">
+          <h4>Kontakt</h4>
+          <ul>
+            <li><a href="https://wa.me/TWÓJ_NUMER">WhatsApp</a></li>
+            <li><a href="mailto:kontakt@explicitdungeon.pl">Email</a></li>
+          </ul>
+          <div style="margin-top:20px">
+            <div class="ed-age-badge"><i class="fas fa-exclamation-circle"></i> Tylko 18+</div>
+          </div>
+        </div>
+      </div>
+      <div class="ed-footer-bottom">
+        <p>&copy; <script>document.write(new Date().getFullYear())</script> Explicit Dungeon Poland. Wszelkie prawa zastrzeżone.</p>
+        <p>Strona przeznaczona wyłącznie dla osób pełnoletnich.</p>
+      </div>
+    </div>
+  </footer>
+
+</div>
+<!-- END .ed-page -->
