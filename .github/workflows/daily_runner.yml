@@ -59,6 +59,17 @@ jobs:
           retention-days: 35
           if-no-files-found: ignore
 
+      - name: Save debug screenshots/HTML as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pinterest-debug-${{ github.run_number }}
+          path: |
+            output/_debug_*.png
+            output/_debug_*.html
+          retention-days: 14
+          if-no-files-found: ignore
+
       - name: Commit tracker update
         run: |
           git config user.name 'PinterestBot'
