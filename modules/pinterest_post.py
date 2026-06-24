@@ -134,32 +134,70 @@ def _upload_image(page, image_path: str):
     page.wait_for_timeout(4000)
 
 
+def _fill_contenteditable(el, value: str):
+    """Some Pinterest fields are contenteditable divs, not <input>/<textarea> — .fill() doesn't work on those."""
+    el.click()
+    el.evaluate("(node) => { node.textContent = ''; }")
+    el.type(value, delay=8)
+
+
 def _fill_field(page, selectors: list, value: str, label: str, required=True):
     """Try each selector in order; raise only if required and all fail."""
     for sel in selectors:
         try:
             el = page.locator(sel).first
             el.wait_for(state="visible", timeout=6000)
-            el.click()
-            page.wait_for_timeout(300)
-            el.fill(value)
+            is_editable_div = el.evaluate(
+                "(node) => node.tagName !== 'INPUT' && node.tagName !== 'TEXTAREA'"
+            )
+            if is_editable_div:
+                _fill_contenteditable(el, value)
+            else:
+                el.click()
+                page.wait_for_timeout(300)
+                el.fill(value)
             return
         except Exception:
             continue
     if required:
-        debug = Path(__file__).parent.parent / "output" / f"_debug_{label}_fail.png"
-        page.screenshot(path=str(debug))
-        raise RuntimeError(f"Could not fill {label} field. Debug: {debug}")
+        debug_png = Path(__file__).parent.parent / "output" / f"_debug_{label}_fail.png"
+        debug_html = Path(__file__).parent.parent / "output" / f"_debug_{label}_fail.html"
+        page.screenshot(path=str(debug_png))
+        debug_html.write_text(page.content(), encoding="utf-8")
+        raise RuntimeError(f"Could not fill {label} field. Debug: {debug_png}, {debug_html}")
     log.warning(f"Skipped optional field: {label}")
 
 
+def _wait_for_draft_form(page, timeout=20000):
+    """Wait for the pin-draft form to actually render before trying to fill it —
+    the title field doesn't exist in the DOM until the SPA finishes hydrating it."""
+    candidates = [
+        '[data-test-id="pin-draft-title"]',
+        '[data-test-id="board-dropdown-select-button"]',
+        '[aria-label*="title" i]',
+        'div[contenteditable="true"]',
+    ]
+    selector = ", ".join(candidates)
+    page.wait_for_selector(selector, timeout=timeout, state="attached")
+
+
 def _fill_pin_details(page, title: str, description: str, link: str, board_name: str):
+    try:
+        _wait_for_draft_form(page)
+    except Exception:
+        pass
     page.wait_for_timeout(1000)
 
     _fill_field(page, [
         '[data-test-id="pin-draft-title"]',
         'input[placeholder*="title" i]',
         'input[name="title"]',
+        'textarea[placeholder*="title" i]',
+        '[aria-label*="add your title" i]',
+        '[aria-label*="title" i]',
+        'div[data-test-id="pin-draft-title"] [contenteditable="true"]',
+        'div[data-test-id="pin-draft-title"] textarea',
+        '[role="textbox"][aria-label*="title" i]',
     ], title[:100], "title")
 
     page.wait_for_timeout(500)
@@ -167,9 +205,12 @@ def _fill_pin_details(page, title: str, description: str, link: str, board_name:
     _fill_field(page, [
         '[data-test-id="pin-draft-description"]',
         'div[data-test-id="pin-draft-description"] textarea',
+        'div[data-test-id="pin-draft-description"] [contenteditable="true"]',
         'textarea[placeholder*="description" i]',
         'textarea[placeholder*="about" i]',
         'textarea[placeholder*="tell" i]',
+        '[aria-label*="description" i]',
+        '[role="textbox"][aria-label*="description" i]',
         'div[contenteditable="true"]',
         'textarea',
     ], description[:500], "description", required=False)
@@ -182,6 +223,7 @@ def _fill_pin_details(page, title: str, description: str, link: str, board_name:
         'input[placeholder*="destination" i]',
         'input[placeholder*="url" i]',
         'input[name="link"]',
+        '[aria-label*="link" i]',
     ], link, "link", required=False)
 
     page.wait_for_timeout(500)
@@ -295,7 +337,15 @@ def post_pin(image_path: str, title: str, description: str, link: str, board_nam
                 )
             _save_cookies(context)
 
-        page.goto("https://www.pinterest.com/pin-creation-tool/", timeout=30000)
+        for attempt in range(3):
+            try:
+                page.goto("https://www.pinterest.com/pin-creation-tool/", timeout=45000)
+                break
+            except PlaywrightTimeout:
+                if attempt == 2:
+                    raise
+                log.warning(f"pin-creation-tool navigation timed out — retrying ({attempt + 1}/3)")
+                page.wait_for_timeout(3000)
         _wait_load(page)
         page.wait_for_timeout(2000)
 
