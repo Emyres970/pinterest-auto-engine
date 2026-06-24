@@ -134,11 +134,22 @@ def _upload_image(page, image_path: str):
     page.wait_for_timeout(4000)
 
 
-def _fill_contenteditable(el, value: str):
-    """Some Pinterest fields are contenteditable divs, not <input>/<textarea> — .fill() doesn't work on those."""
+def _fill_contenteditable(page, el, value: str):
+    """Fill a contenteditable/Draft.js div.
+
+    Setting textContent directly breaks Draft.js state, so we click to focus,
+    then use keyboard shortcuts to clear existing text and type new content.
+    page.keyboard.type() is used instead of el.type() so that focus-delegation
+    (common in Draft.js wrappers that are contenteditable="false") is handled
+    by the browser naturally after the click.
+    """
+    el.scroll_into_view_if_needed()
     el.click()
-    el.evaluate("(node) => { node.textContent = ''; }")
-    el.type(value, delay=8)
+    el.evaluate("(node) => node.focus()")
+    page.wait_for_timeout(300)
+    page.keyboard.press("Control+A")
+    page.keyboard.press("Backspace")
+    page.keyboard.type(value, delay=8)
 
 
 def _fill_field(page, selectors: list, value: str, label: str, required=True):
@@ -151,7 +162,7 @@ def _fill_field(page, selectors: list, value: str, label: str, required=True):
                 "(node) => node.tagName !== 'INPUT' && node.tagName !== 'TEXTAREA'"
             )
             if is_editable_div:
-                _fill_contenteditable(el, value)
+                _fill_contenteditable(page, el, value)
             else:
                 el.click()
                 page.wait_for_timeout(300)
@@ -172,6 +183,8 @@ def _wait_for_draft_form(page, timeout=20000):
     """Wait for the pin-draft form to actually render before trying to fill it —
     the title field doesn't exist in the DOM until the SPA finishes hydrating it."""
     candidates = [
+        'input#storyboard-selector-title',
+        'input[placeholder*="tell everyone" i]',
         '[data-test-id="pin-draft-title"]',
         '[data-test-id="board-dropdown-select-button"]',
         '[aria-label*="title" i]',
@@ -189,7 +202,9 @@ def _fill_pin_details(page, title: str, description: str, link: str, board_name:
     page.wait_for_timeout(1000)
 
     _fill_field(page, [
-        '[data-test-id="pin-draft-title"]',
+        'input#storyboard-selector-title',               # idea-pin-builder (confirmed 2026-06)
+        'input[placeholder*="tell everyone" i]',         # idea-pin-builder fallback
+        '[data-test-id="pin-draft-title"]',              # old pin-creation-tool
         'input[placeholder*="title" i]',
         'input[name="title"]',
         'textarea[placeholder*="title" i]',
@@ -203,7 +218,9 @@ def _fill_pin_details(page, title: str, description: str, link: str, board_name:
     page.wait_for_timeout(500)
 
     _fill_field(page, [
-        '[data-test-id="pin-draft-description"]',
+        '[data-test-id="storyboard-description-field-container"] [aria-label="Describe your Pin"]',  # idea-pin-builder (confirmed 2026-06)
+        '[aria-label="Describe your Pin"]',              # idea-pin-builder fallback
+        '[data-test-id="pin-draft-description"]',        # old pin-creation-tool
         'div[data-test-id="pin-draft-description"] textarea',
         'div[data-test-id="pin-draft-description"] [contenteditable="true"]',
         'textarea[placeholder*="description" i]',
@@ -218,7 +235,9 @@ def _fill_pin_details(page, title: str, description: str, link: str, board_name:
     page.wait_for_timeout(500)
 
     _fill_field(page, [
-        '[data-test-id="pin-draft-link"]',
+        'input#WebsiteField',                            # idea-pin-builder (confirmed 2026-06)
+        'input[placeholder*="add a link" i]',            # idea-pin-builder fallback
+        '[data-test-id="pin-draft-link"]',               # old pin-creation-tool
         'input[placeholder*="link" i]',
         'input[placeholder*="destination" i]',
         'input[placeholder*="url" i]',
@@ -308,10 +327,29 @@ def _select_board(page, board_name: str):
 
 
 def _publish(page):
-    try:
-        page.locator('[data-test-id="board-dropdown-save-button"]').click(timeout=8000)
-    except PlaywrightTimeout:
-        page.locator('button:has-text("Publish")').click()
+    publish_sels = [
+        '[data-test-id="board-dropdown-save-button"]',
+        '[data-test-id="storyboard-publish-button"]',
+        'button:has-text("Publish")',
+        'div[role="button"]:has-text("Publish")',
+        'button[aria-label*="publish" i]',
+        'button:has-text("Done")',
+        'button:has-text("Post")',
+    ]
+    clicked = False
+    for sel in publish_sels:
+        try:
+            el = page.locator(sel).first
+            if el.count() and el.is_visible(timeout=3000):
+                el.click(timeout=8000)
+                clicked = True
+                break
+        except Exception:
+            continue
+    if not clicked:
+        debug = Path(__file__).parent.parent / "output" / "_debug_publish_fail.png"
+        page.screenshot(path=str(debug))
+        raise RuntimeError(f"Could not find Publish button. Debug: {debug}")
 
     _wait_load(page, timeout=30000)
     page.wait_for_timeout(3000)
