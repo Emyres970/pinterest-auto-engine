@@ -1,7 +1,7 @@
 # Pinterest Auto-Engine
 
 Automated pipeline that turns Medium articles into Pinterest pins — from content scraping through AI headline generation, image rendering, and posting.
-
+-
 ---
 
 ## How It Works
