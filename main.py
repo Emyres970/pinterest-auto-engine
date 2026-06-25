@@ -26,6 +26,7 @@ BOARD = os.getenv("PINTEREST_BOARD_NAME", "")
 def run():
     posts = get_next_posts(PINS_PER_DAY)
     log.info(f"Daily run — posting {len(posts)} pins")
+    previous_headline = ""
 
     for i, post in enumerate(posts, start=1):
         idx = post["index"]
@@ -49,13 +50,14 @@ def run():
             title = scraped["title"]
             body = scraped["body"]
 
-            # Step 2 — generate Pinterest headline (cycles through 5 templates)
-            result = generate_headline(title, body, template_index=(i - 1) % 5)
+            # Step 2 — generate Pinterest headline (avoids repeating the previous pin's angle)
+            result = generate_headline(title, body, previous_headline=previous_headline)
             headline = result["headline"]
             blue_words = result.get("blue_words", [])
             emotion = result.get("emotion", "")
             log.info(f"  Headline  : {headline}")
             log.info(f"  Accent    : {blue_words}  |  Emotion: {emotion}")
+            previous_headline = headline
 
             # Step 3 — render pin image
             filename = f"pin_{idx}_{int(time.time())}.png"
