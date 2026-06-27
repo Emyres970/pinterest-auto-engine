@@ -94,13 +94,19 @@ def _extract(url: str) -> dict:
             if text and text not in labels:
                 labels.append(text)
 
+    # Normalize labels to consistent plural forms
+    _LABEL_FIXES = {
+        "Spotting the Narcissist": "Spotting the Narcissists",
+    }
+    labels = [_LABEL_FIXES.get(l, l) for l in labels]
+
     # Sanity check the post body extracted cleanly (mirrors modules/scraper.py's logic)
     container = soup.find("article") or soup.select_one(".post-body") or soup.find("body")
     body_len = 0
     if container:
         body_len = len(container.get_text(strip=True))
 
-    return {"title": title, "category": ", ".join(labels), "body_len": body_len}
+    return {"title": title, "categories": labels, "body_len": body_len}
 
 
 def main():
@@ -117,7 +123,7 @@ def main():
         try:
             data = _extract(url)
             print(f"[{i}/{len(URLS)}] {data['title'][:60]!r}  "
-                  f"category={data['category'] or '(none found)'}  "
+                  f"category={', '.join(data['categories']) or '(none found)'}  "
                   f"body_chars={data['body_len']}")
             if data["body_len"] < 300:
                 print(f"    WARNING: body looks thin — check this page's markup manually: {url}")
@@ -126,7 +132,7 @@ def main():
                 "url": url,
                 "friend_link": url,  # no paywall on the blog — same link for scraping and destination
                 "title": data["title"],
-                "category": data["category"],
+                "categories": data["categories"],
             })
         except Exception as e:
             print(f"[{i}/{len(URLS)}] FAILED on {url}: {e}")
@@ -135,7 +141,7 @@ def main():
                 "url": url,
                 "friend_link": url,
                 "title": "",
-                "category": "",
+                "categories": [],
             })
 
     POSTS_FILE.write_text(json.dumps(new_posts, indent=2), encoding="utf-8")
