@@ -40,8 +40,10 @@ def _parse_html(html: str) -> dict:
             title = (og.get("content") or "").strip()
 
     # ── Body ───────────────────────────────────────────────────────────────
-    # Medium renders the article inside <article>; fall back to <body>.
-    container = soup.find("article") or soup.find("body")
+    # Medium renders the article inside <article>; Blogger wraps post content in
+    # .post-body without an <article> tag, so try that before falling back to <body>
+    # (which would otherwise pull in the whole page's nav/sidebar/footer chrome).
+    container = soup.find("article") or soup.select_one(".post-body") or soup.find("body")
     seen = set()
     parts = []
 
