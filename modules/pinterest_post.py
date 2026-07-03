@@ -131,7 +131,54 @@ def _upload_image(page, image_path: str):
         raise
 
     file_input.set_input_files(image_path)
-    page.wait_for_timeout(4000)
+    page.wait_for_timeout(5000)
+
+
+def _click_next_if_present(page) -> bool:
+    """Click 'Next' after image upload if Pinterest is in its two-step creation flow."""
+    next_sels = [
+        '[data-test-id="creation-next-button"]',
+        'button:has-text("Next")',
+        'div[role="button"]:has-text("Next")',
+        'button:has-text("Continue")',
+        '[aria-label="Next"]',
+        'button[type="submit"]:has-text("Next")',
+    ]
+    for sel in next_sels:
+        try:
+            el = page.locator(sel).first
+            if el.count() and el.is_visible(timeout=2000):
+                log.info("  Two-step flow detected — clicking Next")
+                el.click()
+                page.wait_for_timeout(3000)
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def _log_visible_inputs(page):
+    """Enumerate visible inputs and log them — used to diagnose selector failures."""
+    try:
+        items = page.evaluate("""() =>
+            Array.from(document.querySelectorAll(
+                'input:not([type="file"]):not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), textarea, [contenteditable="true"]'
+            )).filter(el => {
+                const r = el.getBoundingClientRect();
+                return r.width > 10 && r.height > 10;
+            }).map(el => [
+                el.tagName,
+                el.id,
+                el.getAttribute('name') || '',
+                el.getAttribute('type') || '',
+                (el.getAttribute('placeholder') || '').slice(0, 40),
+                (el.getAttribute('aria-label') || '').slice(0, 40),
+                el.getAttribute('data-test-id') || '',
+            ])
+        """)
+        log.info(f"  Visible inputs: {items}")
+    except Exception as e:
+        log.debug(f"Could not enumerate inputs: {e}")
 
 
 def _fill_contenteditable(page, el, value: str):
@@ -171,6 +218,10 @@ def _fill_field(page, selectors: list, value: str, label: str, required=True):
         except Exception:
             continue
     if required:
+        # Log URL and visible inputs before saving debug files — helps diagnose
+        # without downloading the artifact.
+        log.info(f"  Current URL: {page.url}")
+        _log_visible_inputs(page)
         debug_png = Path(__file__).parent.parent / "output" / f"_debug_{label}_fail.png"
         debug_html = Path(__file__).parent.parent / "output" / f"_debug_{label}_fail.html"
         page.screenshot(path=str(debug_png))
@@ -387,7 +438,9 @@ def post_pin(image_path: str, title: str, description: str, link: str, board_nam
         _wait_load(page)
         page.wait_for_timeout(2000)
 
+        log.info(f"  Page URL  : {page.url}")
         _upload_image(page, image_path)
+        _click_next_if_present(page)
         _fill_pin_details(page, title, description, link, board_name)
         _select_board(page, board_name)
         _publish(page)
