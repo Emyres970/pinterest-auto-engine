@@ -142,7 +142,7 @@ def _try_gemini(prompt: str) -> dict:
     from google.genai import types
     client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model="gemini-2.5-flash",
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_PROMPT,
             temperature=0.9,
@@ -159,23 +159,22 @@ def generate_headline(title: str, body: str, previous_headline: str = "") -> dic
         previous_headline=previous_headline or "(none yet — this is the first headline of the batch)",
     )
 
-    # Gemini disabled — this account's free tier is hard-capped at limit:0 (needs paid
-    # billing to re-enable), so every call was wasting up to 180s in retries before
-    # falling back to Groq anyway. Re-enable once Gemini billing is funded.
-    # if os.getenv("GEMINI_API_KEY"):
-    #     for attempt in range(3):
-    #         try:
-    #             return _try_gemini(prompt)
-    #         except Exception as e:
-    #             if "429" in str(e) and attempt < 2:
-    #                 wait = 60 * (attempt + 1)
-    #                 log.warning(f"Gemini rate limit — retrying in {wait}s")
-    #                 time.sleep(wait)
-    #             else:
-    #                 log.warning(f"Gemini failed — falling back to Groq: {e}")
-    #                 break
+    # Gemini 2.5 Flash — primary (gemini-2.0-flash was deprecated June 2026)
+    # Falls back to Groq if GEMINI_API_KEY is not set or if Gemini errors.
+    if os.getenv("GEMINI_API_KEY"):
+        for attempt in range(3):
+            try:
+                return _try_gemini(prompt)
+            except Exception as e:
+                if "429" in str(e) and attempt < 2:
+                    wait = 60 * (attempt + 1)
+                    log.warning(f"Gemini rate limit — retrying in {wait}s")
+                    time.sleep(wait)
+                else:
+                    log.warning(f"Gemini failed — falling back to Groq: {e}")
+                    break
 
-    # Groq — primary for now
+    # Groq — fallback
     if os.getenv("GROQ_API_KEY"):
         return _try_groq(prompt)
 
