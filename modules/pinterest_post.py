@@ -7,6 +7,19 @@ from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeo
 COOKIES_FILE = Path(__file__).parent.parent / ".pinterest_cookies.json"
 log = logging.getLogger(__name__)
 
+TAGS = [
+    "Relationship Goals",
+    "Relationship Advice",
+    "Healthy Relationship Advice",
+    "Relationship Quotes",
+    "Love Quotes",
+    "Inspirational Quotes",
+    "Marriage Quotes",
+    "Marriage Advice",
+    "Successful Marriage",
+    "Happy Marriage",
+]
+
 ANTI_DETECT_SCRIPT = """
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3] });
@@ -374,6 +387,90 @@ def _wait_for_draft_form(page, timeout=300000):
     )
 
 
+def _fill_tags(page, tags: list):
+    """Add up to 10 interest tags via the combobox autocomplete.
+
+    Pinterest's tag combobox is search-only: free-form entries are rejected.
+    Tags that return no suggestion are silently skipped. Tags are private
+    recommendation signals — the UI says "people won't see your tags".
+
+    The suggestion list loads asynchronously; we wait up to 4 s per tag.
+    Confirmation that a tag was accepted: the combobox value returns to "".
+    """
+    cb = None
+    for sel in [
+        '#combobox-storyboard-interest-tags',
+        'input[placeholder*="Search for a tag" i]',
+    ]:
+        try:
+            el = page.locator(sel).first
+            el.wait_for(state="visible", timeout=5000)
+            cb = el
+            break
+        except Exception:
+            continue
+
+    if cb is None:
+        log.warning("  Tag combobox not found — skipping tags")
+        return
+
+    added = 0
+    for tag in tags:
+        if added >= 10:
+            break
+        try:
+            cb.scroll_into_view_if_needed()
+            cb.click()
+            page.wait_for_timeout(200)
+            cb.fill(tag)
+
+            # Suggestion list loads asynchronously — can take 2-4 s
+            try:
+                page.wait_for_selector('[role="option"]', timeout=4000, state="visible")
+            except Exception:
+                log.warning(f"  No Pinterest suggestion for '{tag}' — skipping")
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(300)
+                continue
+
+            opt = page.locator('[role="option"]').first
+            if not opt.count() or not opt.is_visible():
+                log.warning(f"  Suggestion vanished for '{tag}' — skipping")
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(300)
+                continue
+
+            matched = opt.inner_text().strip()
+            opt.click()
+            page.wait_for_timeout(600)
+
+            # Combobox resets to "" when the tag is accepted by Pinterest
+            val = page.evaluate(
+                "() => { const e = document.getElementById('combobox-storyboard-interest-tags'); return e ? e.value : null; }"
+            )
+            if val == "":
+                added += 1
+                log.info(f"  Tag {added}/10: '{matched}'")
+            else:
+                log.warning(f"  Tag not accepted for '{tag}'")
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(300)
+
+        except Exception as e:
+            log.warning(f"  Error adding tag '{tag}': {e}")
+            try:
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(300)
+            except Exception:
+                pass
+
+    total = min(10, len(tags))
+    if added < total:
+        log.warning(f"  Tags: {added}/{total} added ({total - added} skipped — not in Pinterest taxonomy)")
+    else:
+        log.info(f"  Tags: all {added}/{total} added")
+
+
 def _fill_pin_details(page, title: str, description: str, link: str, board_name: str):
     try:
         _wait_for_draft_form(page)
@@ -460,6 +557,9 @@ def _fill_pin_details(page, title: str, description: str, link: str, board_name:
     ], link, "link", required=False)
 
     page.wait_for_timeout(500)
+
+    # --- Tags ---
+    _fill_tags(page, TAGS)
 
 
 def _select_board(page, board_name: str):
