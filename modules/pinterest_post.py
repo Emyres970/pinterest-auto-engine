@@ -134,6 +134,74 @@ def _upload_image(page, image_path: str):
     page.wait_for_timeout(5000)
 
 
+def _clear_draft_limit(page) -> bool:
+    """Detect the 50-draft cap and bulk-delete all drafts to make room.
+
+    Returns True if drafts were cleared (caller must retry the upload on a fresh
+    page), False if no limit error was found.
+
+    Each failed CI run leaves a draft behind (image uploaded but never published).
+    After enough failures the account hits Pinterest's 50-draft ceiling and all
+    subsequent uploads fail silently, showing a 50-draft error instead of the
+    form — the root cause of the cascading CI failures.
+    """
+    if not page.locator('text="You have reached the limit of 50 drafts"').count():
+        return False
+    log.warning("Pinterest 50-draft limit hit — bulk-deleting all saved drafts")
+    try:
+        cb = page.locator('#storyboard-drafts-sidebar-bulk-select-checkbox')
+        cb.wait_for(state="visible", timeout=6000)
+        cb.click()
+        page.wait_for_timeout(1500)
+
+        deleted = False
+        for del_sel in [
+            'button:has-text("Delete all")',
+            'button:has-text("Delete")',
+            '[data-test-id="storyboard-bulk-delete-button"]',
+            '[data-test-id*="delete"]',
+            'button[aria-label*="delete" i]',
+        ]:
+            btn = page.locator(del_sel).first
+            try:
+                if btn.count() and btn.is_visible(timeout=2000):
+                    btn.click()
+                    page.wait_for_timeout(1000)
+                    for confirm_sel in [
+                        'button:has-text("Delete")',
+                        'button:has-text("Yes")',
+                        'button:has-text("Confirm")',
+                        'button:has-text("OK")',
+                    ]:
+                        c = page.locator(confirm_sel).first
+                        try:
+                            if c.count() and c.is_visible(timeout=2000):
+                                c.click()
+                                break
+                        except Exception:
+                            pass
+                    page.wait_for_timeout(4000)
+                    deleted = True
+                    break
+            except Exception:
+                continue
+
+        if not deleted:
+            raise RuntimeError(
+                "Pinterest draft limit (50) reached but delete button not found. "
+                "Delete old drafts manually at pinterest.com/idea-pin-builder/"
+            )
+        log.info("  Draft bulk-delete complete")
+        return True
+    except RuntimeError:
+        raise
+    except Exception as e:
+        raise RuntimeError(
+            f"Pinterest draft limit (50) reached; auto-clear failed ({e}). "
+            "Delete old drafts manually at pinterest.com/idea-pin-builder/"
+        )
+
+
 def _click_next_if_present(page) -> bool:
     """Click 'Next' after image upload if Pinterest is in its two-step creation flow."""
     next_sels = [
@@ -259,12 +327,12 @@ def _fill_field(page, selectors: list, value: str, label: str, required=True):
                 _fill_contenteditable(page, el, value)
             else:
                 try:
-                    el.click()
+                    el.click(timeout=5000)
                 except Exception:
                     # An overlay may block the click; focus via JS and fall through to fill().
                     el.evaluate("(node) => node.focus()")
                 page.wait_for_timeout(300)
-                el.fill(value)
+                el.fill(value, timeout=5000)
             return
         except Exception:
             continue
@@ -281,22 +349,29 @@ def _fill_field(page, selectors: list, value: str, label: str, required=True):
     log.warning(f"Skipped optional field: {label}")
 
 
-def _wait_for_draft_form(page, timeout=120000):
-    """Wait for the pin-draft form to actually render before trying to fill it.
+def _wait_for_draft_form(page, timeout=300000):
+    """Wait for the pin-draft title input to be visible AND enabled.
 
-    Pinterest processes the uploaded image on their servers before rendering the
-    form; this can take 30–90 seconds. 120s gives comfortable headroom.
+    Pinterest processes the uploaded image server-side before enabling the form.
+    The title input (input#storyboard-selector-title) appears in the DOM while
+    still disabled=true during processing; waiting only for 'visible' causes all
+    fill attempts to fail because React resets el.value on every re-render while
+    the element is disabled. We must wait for !el.disabled before proceeding.
+    300 s gives comfortable headroom for large images (processing takes 30–180 s).
     """
-    candidates = [
-        'input#storyboard-selector-title',
-        'input[placeholder*="tell everyone" i]',
-        '[data-test-id="pin-draft-title"]',
-        '[data-test-id="board-dropdown-select-button"]',
-        '[aria-label*="title" i]',
-        'div[contenteditable="true"]',
-    ]
-    selector = ", ".join(candidates)
-    page.wait_for_selector(selector, timeout=timeout, state="visible")
+    page.wait_for_function(
+        """() => {
+            const el = document.getElementById('storyboard-selector-title');
+            if (el) {
+                const r = el.getBoundingClientRect();
+                return r.width > 0 && r.height > 0 && !el.disabled;
+            }
+            // Fallback: a visible contenteditable means the form is ready
+            const ce = document.querySelector('[aria-label="Describe your Pin"]');
+            return !!(ce && ce.getBoundingClientRect().width > 0);
+        }""",
+        timeout=timeout,
+    )
 
 
 def _fill_pin_details(page, title: str, description: str, link: str, board_name: str):
@@ -331,6 +406,17 @@ def _fill_pin_details(page, title: str, description: str, link: str, board_name:
         title_filled = True
     except RuntimeError:
         log.warning("  Playwright fill failed for title — trying JS injection")
+        # Guard: ensure the input is enabled before JS fill. _wait_for_draft_form
+        # may have timed out while the element was still disabled (large image,
+        # slow server-side processing). React resets el.value on every re-render
+        # while disabled=true, so _js_fill would return False without this wait.
+        try:
+            page.wait_for_function(
+                "() => { const el = document.getElementById('storyboard-selector-title'); return el && !el.disabled; }",
+                timeout=120000,
+            )
+        except Exception:
+            pass
         if _js_fill(page, 'storyboard-selector-title', title[:100]):
             log.info("  Title filled via JS injection")
             title_filled = True
@@ -517,6 +603,15 @@ def post_pin(image_path: str, title: str, description: str, link: str, board_nam
 
         log.info(f"  Page URL  : {page.url}")
         _upload_image(page, image_path)
+
+        # If the account hit the 50-draft ceiling, bulk-delete all drafts then
+        # re-navigate and re-upload so the creation flow starts clean.
+        if _clear_draft_limit(page):
+            page.goto("https://www.pinterest.com/pin-creation-tool/", timeout=45000)
+            _wait_load(page)
+            page.wait_for_timeout(2000)
+            _upload_image(page, image_path)
+
         _click_next_if_present(page)
         _fill_pin_details(page, title, description, link, board_name)
         _select_board(page, board_name)
