@@ -181,6 +181,53 @@ def _log_visible_inputs(page):
         log.debug(f"Could not enumerate inputs: {e}")
 
 
+def _dismiss_overlays(page):
+    """Dismiss any modal or overlay that might block form interaction."""
+    try:
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(400)
+    except Exception:
+        pass
+    for sel in [
+        'button[aria-label="Close"]',
+        'button[aria-label="Dismiss"]',
+        '[role="dialog"] button[aria-label*="close" i]',
+        '[aria-modal="true"] button[aria-label*="close" i]',
+        '[data-test-id*="closeup-close"]',
+    ]:
+        try:
+            el = page.locator(sel).first
+            if el.count() and el.is_visible(timeout=800):
+                el.click()
+                page.wait_for_timeout(500)
+                break
+        except Exception:
+            pass
+
+
+def _js_fill(page, element_id: str, value: str) -> bool:
+    """Fill a React-controlled input via JS — bypasses all Playwright actionability checks.
+
+    Uses the native HTMLInputElement value setter so React's synthetic event
+    system recognises the change and updates component state correctly.
+    """
+    try:
+        return bool(page.evaluate("""([id, v]) => {
+            const el = document.getElementById(id);
+            if (!el) return false;
+            const setter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'value'
+            ).set;
+            setter.call(el, v);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return el.value === v;
+        }""", [element_id, value]))
+    except Exception as e:
+        log.debug(f"JS fill failed for #{element_id}: {e}")
+        return False
+
+
 def _fill_contenteditable(page, el, value: str):
     """Fill a contenteditable/Draft.js div.
 
@@ -259,19 +306,42 @@ def _fill_pin_details(page, title: str, description: str, link: str, board_name:
         pass
     page.wait_for_timeout(1000)
 
-    _fill_field(page, [
-        'input#storyboard-selector-title',               # idea-pin-builder (confirmed 2026-06)
-        'input[placeholder*="tell everyone" i]',         # idea-pin-builder fallback
-        '[data-test-id="pin-draft-title"]',              # old pin-creation-tool
-        'input[placeholder*="title" i]',
-        'input[name="title"]',
-        'textarea[placeholder*="title" i]',
-        '[aria-label*="add your title" i]',
-        '[aria-label*="title" i]',
-        'div[data-test-id="pin-draft-title"] [contenteditable="true"]',
-        'div[data-test-id="pin-draft-title"] textarea',
-        '[role="textbox"][aria-label*="title" i]',
-    ], title[:100], "title")
+    # Dismiss any modal/overlay before touching the form
+    _dismiss_overlays(page)
+
+    # --- Title ---
+    # Try Playwright's selector-based fill first. If every selector fails (e.g.
+    # an image-processing overlay is blocking actionability checks), fall back to
+    # a JS injection that bypasses those checks entirely.
+    title_filled = False
+    try:
+        _fill_field(page, [
+            'input#storyboard-selector-title',               # idea-pin-builder (confirmed 2026-06)
+            'input[placeholder*="tell everyone" i]',         # idea-pin-builder fallback
+            '[data-test-id="pin-draft-title"]',              # old pin-creation-tool
+            'input[placeholder*="title" i]',
+            'input[name="title"]',
+            'textarea[placeholder*="title" i]',
+            '[aria-label*="add your title" i]',
+            '[aria-label*="title" i]',
+            'div[data-test-id="pin-draft-title"] [contenteditable="true"]',
+            'div[data-test-id="pin-draft-title"] textarea',
+            '[role="textbox"][aria-label*="title" i]',
+        ], title[:100], "title")
+        title_filled = True
+    except RuntimeError:
+        log.warning("  Playwright fill failed for title — trying JS injection")
+        if _js_fill(page, 'storyboard-selector-title', title[:100]):
+            log.info("  Title filled via JS injection")
+            title_filled = True
+        else:
+            log.info(f"  Current URL: {page.url}")
+            _log_visible_inputs(page)
+            debug_png = Path(__file__).parent.parent / "output" / "_debug_title_fail.png"
+            debug_html = Path(__file__).parent.parent / "output" / "_debug_title_fail.html"
+            page.screenshot(path=str(debug_png))
+            debug_html.write_text(page.content(), encoding="utf-8")
+            raise RuntimeError(f"Could not fill title field. Debug: {debug_png}, {debug_html}")
 
     page.wait_for_timeout(500)
 
