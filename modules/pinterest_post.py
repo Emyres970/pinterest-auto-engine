@@ -211,7 +211,11 @@ def _fill_field(page, selectors: list, value: str, label: str, required=True):
             if is_editable_div:
                 _fill_contenteditable(page, el, value)
             else:
-                el.click()
+                try:
+                    el.click()
+                except Exception:
+                    # An overlay may block the click; focus via JS and fall through to fill().
+                    el.evaluate("(node) => node.focus()")
                 page.wait_for_timeout(300)
                 el.fill(value)
             return
@@ -230,9 +234,12 @@ def _fill_field(page, selectors: list, value: str, label: str, required=True):
     log.warning(f"Skipped optional field: {label}")
 
 
-def _wait_for_draft_form(page, timeout=20000):
-    """Wait for the pin-draft form to actually render before trying to fill it —
-    the title field doesn't exist in the DOM until the SPA finishes hydrating it."""
+def _wait_for_draft_form(page, timeout=120000):
+    """Wait for the pin-draft form to actually render before trying to fill it.
+
+    Pinterest processes the uploaded image on their servers before rendering the
+    form; this can take 30–90 seconds. 120s gives comfortable headroom.
+    """
     candidates = [
         'input#storyboard-selector-title',
         'input[placeholder*="tell everyone" i]',
@@ -242,7 +249,7 @@ def _wait_for_draft_form(page, timeout=20000):
         'div[contenteditable="true"]',
     ]
     selector = ", ".join(candidates)
-    page.wait_for_selector(selector, timeout=timeout, state="attached")
+    page.wait_for_selector(selector, timeout=timeout, state="visible")
 
 
 def _fill_pin_details(page, title: str, description: str, link: str, board_name: str):
