@@ -14,8 +14,9 @@ OUTPUT_DIR = Path(__file__).parent.parent / "output"
 # Templates cycle by post_index % len(TEMPLATES), so posts are evenly
 # spread across designs over time.  Add more entries here to grow the pool.
 TEMPLATES = [
-    {"html_file": "pin_template.html",       "uppercase": True},
-    {"html_file": "pin_template_olive.html", "uppercase": False},
+    {"html_file": "pin_template.html",           "uppercase": True},
+    {"html_file": "pin_template_olive.html",     "uppercase": False},
+    {"html_file": "pin_template_spotlight.html", "uppercase": False},
 ]
 
 
