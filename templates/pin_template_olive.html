@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1000px;
+    height: 1500px;
+    background: #58672F;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 90px 72px 48px;
+    text-align: center;
+  }
+
+  .headline {
+    font-family: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    font-size: 116px;
+    font-weight: 900;
+    line-height: 1.13;
+    color: #FFFFFF;
+    letter-spacing: -1px;
+    word-break: break-word;
+    /* No text-transform: keep sentence / title case from the LLM */
+  }
+
+  .headline .accent {
+    color: #EDD87C;
+  }
+
+  .footer {
+    width: 100%;
+    background: #C4AD78;
+    padding: 28px 72px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .brand-name {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #353E18;
+    text-transform: uppercase;
+  }
+
+  .brand-url {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: 2px;
+    color: #4E5A22;
+    text-transform: lowercase;
+  }
+</style>
+</head>
+<body>
+  <div class="main">
+    <div class="headline" id="hl">{{HEADLINE_HTML}}</div>
+  </div>
+  <div class="footer">
+    <div class="brand-name">{{BRAND_NAME}}</div>
+    <div class="brand-url">{{BRAND_URL}}</div>
+  </div>
+
+  <script>
+    // Auto-shrink font until headline fits its container
+    const hl = document.getElementById('hl');
+    const container = hl.parentElement;
+    let size = 116;
+    while (hl.scrollHeight > container.clientHeight - 20 && size > 52) {
+      size -= 3;
+      hl.style.fontSize = size + 'px';
+    }
+  </script>
+</body>
+</html>
