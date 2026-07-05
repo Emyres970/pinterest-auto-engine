@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1000px;
+    height: 1500px;
+    background: #EBEBEA;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 90px 80px 40px;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .headline {
+    font-family: 'Nunito', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 110px;
+    font-weight: 900;
+    line-height: 1.1;
+    color: #131313;
+    letter-spacing: -1.5px;
+    word-break: break-word;
+  }
+
+  /* No accent color — accent spans inherit the main text color */
+  .headline .accent {
+    color: #131313;
+  }
+
+  .footer {
+    flex-shrink: 0;
+    width: 100%;
+    background: #DEDDDB;
+    padding: 30px 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .brand-name {
+    font-family: 'Nunito', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 22px;
+    font-weight: 900;
+    letter-spacing: 5px;
+    color: #444440;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+  <div class="main">
+    <div class="headline" id="hl">{{HEADLINE_HTML}}</div>
+  </div>
+  <div class="footer">
+    <div class="brand-name">{{BRAND_NAME}}</div>
+  </div>
+
+  <script>
+    // Auto-shrink font until headline fits its container
+    const hl = document.getElementById('hl');
+    const container = hl.parentElement;
+    let size = 110;
+    while (hl.scrollHeight > container.clientHeight - 20 && size > 52) {
+      size -= 3;
+      hl.style.fontSize = size + 'px';
+    }
+  </script>
+</body>
+</html>
