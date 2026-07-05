@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@1,700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1000px;
+    height: 1500px;
+    background: #C87B6A;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 90px 80px 40px;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .headline {
+    font-family: 'Playfair Display', Georgia, 'Book Antiqua', Palatino, serif;
+    font-size: 116px;
+    font-weight: 700;
+    font-style: italic;
+    line-height: 1.12;
+    color: #111111;
+    letter-spacing: -1px;
+    word-break: break-word;
+  }
+
+  /* No accent color — accent spans match body text */
+  .headline .accent {
+    color: #111111;
+  }
+
+  .footer {
+    flex-shrink: 0;
+    width: 100%;
+    background: #FFFFFF;
+    padding: 28px 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .brand-url {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #333333;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+  <div class="main">
+    <div class="headline" id="hl">{{HEADLINE_HTML}}</div>
+  </div>
+  <div class="footer">
+    <div class="brand-url">{{BRAND_URL}}</div>
+  </div>
+
+  <script>
+    // Auto-shrink font until headline fits its container
+    const hl = document.getElementById('hl');
+    const container = hl.parentElement;
+    let size = 116;
+    while (hl.scrollHeight > container.clientHeight - 20 && size > 52) {
+      size -= 3;
+      hl.style.fontSize = size + 'px';
+    }
+  </script>
+</body>
+</html>
