@@ -18,6 +18,8 @@ TEMPLATES = [
     {"html_file": "pin_template_olive.html",      "uppercase": False},
     {"html_file": "pin_template_spotlight.html",  "uppercase": False},
     {"html_file": "pin_template_terracotta.html", "uppercase": False},
+    {"html_file": "pin_template_marble.html",     "uppercase": False},
+    {"html_file": "pin_template_red.html",        "uppercase": False},
 ]
 
 

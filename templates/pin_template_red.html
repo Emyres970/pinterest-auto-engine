@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1000px;
+    height: 1500px;
+    background: #F0EFED;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 90px 72px 40px;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .headline {
+    font-family: 'Poppins', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 112px;
+    font-weight: 900;
+    line-height: 1.1;
+    color: #E32020;
+    letter-spacing: -1px;
+    word-break: break-word;
+  }
+
+  /* Accent words appear in black — reversed from our usual pattern */
+  .headline .accent {
+    color: #111111;
+  }
+
+  .footer {
+    flex-shrink: 0;
+    width: 100%;
+    padding: 28px 72px 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .brand-pill {
+    background: #1C3A6B;
+    border-radius: 16px;
+    padding: 22px 72px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .brand-url {
+    font-family: 'Poppins', Arial, Helvetica, sans-serif;
+    font-size: 24px;
+    font-weight: 900;
+    letter-spacing: 1px;
+    color: #FFFFFF;
+    text-transform: lowercase;
+  }
+</style>
+</head>
+<body>
+  <div class="main">
+    <div class="headline" id="hl">{{HEADLINE_HTML}}</div>
+  </div>
+  <div class="footer">
+    <div class="brand-pill">
+      <div class="brand-url">{{BRAND_URL}}</div>
+    </div>
+  </div>
+
+  <script>
+    const hl = document.getElementById('hl');
+    const container = hl.parentElement;
+    let size = 112;
+    while (hl.scrollHeight > container.clientHeight - 20 && size > 52) {
+      size -= 3;
+      hl.style.fontSize = size + 'px';
+    }
+  </script>
+</body>
+</html>

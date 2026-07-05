@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Merriweather:wght@700;900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1000px;
+    height: 1500px;
+    /* Layered radial gradients simulate the soft watercolor marble blotches */
+    background-color: #FAF3EE;
+    background-image:
+      radial-gradient(ellipse 620px 520px at 76% 14%, rgba(213,148,118,0.30) 0%, transparent 70%),
+      radial-gradient(ellipse 520px 640px at 22% 82%, rgba(218,155,135,0.22) 0%, transparent 66%),
+      radial-gradient(ellipse 420px 370px at 88% 62%, rgba(232,180,155,0.16) 0%, transparent 60%),
+      radial-gradient(ellipse 360px 420px at 12% 38%, rgba(238,192,168,0.13) 0%, transparent 56%),
+      radial-gradient(ellipse 240px 200px at 52% 48%, rgba(222,166,140,0.09) 0%, transparent 52%);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 100px 88px 30px;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .headline {
+    font-family: 'Merriweather', Georgia, 'Times New Roman', serif;
+    font-size: 112px;
+    font-weight: 900;
+    line-height: 1.15;
+    color: #111111;
+    letter-spacing: -0.5px;
+    word-break: break-word;
+  }
+
+  /* No accent color — accent words match body text */
+  .headline .accent {
+    color: #111111;
+  }
+
+  .footer {
+    flex-shrink: 0;
+    width: 100%;
+    padding: 32px 88px 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .brand-url {
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 4px;
+    color: #333333;
+    text-transform: uppercase;
+  }
+</style>
+</head>
+<body>
+  <div class="main">
+    <div class="headline" id="hl">{{HEADLINE_HTML}}</div>
+  </div>
+  <div class="footer">
+    <div class="brand-url">{{BRAND_URL}}</div>
+  </div>
+
+  <script>
+    const hl = document.getElementById('hl');
+    const container = hl.parentElement;
+    let size = 112;
+    while (hl.scrollHeight > container.clientHeight - 20 && size > 52) {
+      size -= 3;
+      hl.style.fontSize = size + 'px';
+    }
+  </script>
+</body>
+</html>
