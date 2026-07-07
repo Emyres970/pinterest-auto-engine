@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@900&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    width: 1000px;
+    height: 1500px;
+    background: #6BCFB4;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 90px 80px 40px;
+    text-align: center;
+    overflow: hidden;
+  }
+
+  .headline {
+    font-family: 'Poppins', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 118px;
+    font-weight: 900;
+    line-height: 1.08;
+    color: #111111;
+    letter-spacing: -1.5px;
+    word-break: break-word;
+  }
+
+  /* No accent color — accent words match body text */
+  .headline .accent {
+    color: #111111;
+  }
+
+  .footer {
+    flex-shrink: 0;
+    width: 100%;
+    padding: 20px 80px 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .brand-name {
+    font-family: 'Poppins', -apple-system, 'Helvetica Neue', Arial, sans-serif;
+    font-size: 32px;
+    font-weight: 900;
+    letter-spacing: -0.5px;
+    color: #1A4EBB;
+  }
+</style>
+</head>
+<body>
+  <div class="main">
+    <div class="headline" id="hl">{{HEADLINE_HTML}}</div>
+  </div>
+  <div class="footer">
+    <div class="brand-name">{{BRAND_NAME}}</div>
+  </div>
+
+  <script>
+    const hl = document.getElementById('hl');
+    const container = hl.parentElement;
+    let size = 118;
+    while (hl.scrollHeight > container.clientHeight - 20 && size > 52) {
+      size -= 3;
+      hl.style.fontSize = size + 'px';
+    }
+  </script>
+</body>
+</html>
