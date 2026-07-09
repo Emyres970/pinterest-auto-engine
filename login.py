@@ -8,6 +8,7 @@ CAPTCHA, etc.). Once you see your home feed, the script detects it, saves cookie
 and exits. After that, main.py runs fully headless.
 """
 
+import argparse
 import json
 import time
 from pathlib import Path
@@ -16,7 +17,11 @@ from playwright.sync_api import sync_playwright
 
 load_dotenv()
 
-COOKIES_FILE = Path(__file__).parent / ".pinterest_cookies.json"
+_parser = argparse.ArgumentParser()
+_parser.add_argument("--output", default=".pinterest_cookies.json",
+                     help="Cookie file to write (default: .pinterest_cookies.json)")
+_args = _parser.parse_args()
+COOKIES_FILE = Path(__file__).parent / _args.output
 
 ANTI_DETECT_SCRIPT = """
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -75,8 +80,10 @@ def main():
             if _is_home_feed(page):
                 cookies = context.cookies()
                 COOKIES_FILE.write_text(json.dumps(cookies), encoding="utf-8")
-                print(f"Logged in! Cookies saved to {COOKIES_FILE}")
-                print("You can now run:  python main.py")
+                print(f"\nLogged in! Cookies saved to {COOKIES_FILE}")
+                print("\nTo use these cookies in GitHub Actions, run:")
+                print(f"  base64 -w 0 {COOKIES_FILE}")
+                print("Then paste that output as the PINTEREST_COOKIES_B64 secret in your repo.")
                 browser.close()
                 return
 

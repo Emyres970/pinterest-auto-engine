@@ -1,3 +1,4 @@
+import json
 import os
 import time
 import logging
@@ -21,6 +22,29 @@ from modules.tracker import get_next_posts, log_result
 PINS_PER_DAY = int(os.getenv("PINS_PER_DAY", "15"))
 DELAY = int(os.getenv("DELAY_BETWEEN_PINS", "180"))  # seconds
 BOARD = os.getenv("PINTEREST_BOARD_NAME", "")
+
+# Optional category→board mapping (used when one account has multiple boards).
+# Set PINTEREST_BOARD_MAP to a JSON object e.g.:
+#   {"Healing and recovery": "Healing And Recovery", "Narc tactic exposed": "Narc Tactics Exposed"}
+# Falls back to PINTEREST_BOARD_NAME when not set.
+_raw_map = os.getenv("PINTEREST_BOARD_MAP", "")
+BOARD_MAP: dict = json.loads(_raw_map) if _raw_map else {}
+
+
+def _resolve_board(post: dict) -> str:
+    """Return the correct board name for this post.
+
+    If PINTEREST_BOARD_MAP is set, pick the first category that has a
+    mapping entry; fall back to the first board in the map if none match.
+    Otherwise use the single PINTEREST_BOARD_NAME value.
+    """
+    if not BOARD_MAP:
+        return BOARD
+    for cat in post.get("categories", []):
+        if cat in BOARD_MAP:
+            return BOARD_MAP[cat]
+    # Post has no matching category — use the first board as a safe default
+    return next(iter(BOARD_MAP.values()))
 
 
 def run():
@@ -70,7 +94,7 @@ def run():
                 title=headline,
                 description=headline,
                 link=url,
-                board_name=BOARD,
+                board_name=_resolve_board(post),
             )
             log.info("  Status    : posted")
             log_result(idx, title, url, headline, image_path, "success")
