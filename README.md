@@ -106,6 +106,7 @@ python main.py
 | `modules/tracker.py`          | Reads `posts.json`, cycles posts, logs results to `tracker.csv` |
 | `templates/pin_template.html` | HTML/CSS template for the pin image                             |
 | `login.py`                    | One-time interactive Pinterest login to capture session cookies |
+| `clear_drafts.py`             | Bulk-deletes all saved Pinterest drafts (run before each daily automation to stay under the 50-draft cap) |
 | `tracker.csv`                 | Append-only log of every attempted pin (auto-created)           |
 
 ---
@@ -146,3 +147,4 @@ Posts are served in order from `posts.json` and cycle indefinitely using modulo 
 | Gemini quota error | Free-tier rate limit hit | Wait or upgrade Gemini plan |
 | Pinterest board not found | Board name mismatch | Check `PINTEREST_BOARD_NAME` matches exactly |
 | Pinterest login loop | Cookies expired | Re-run `python login.py` |
+| Uploads fail with a 50-draft error | Old drafts from failed runs piled up | Run `python clear_drafts.py` (both daily workflows already run this before `main.py`) |

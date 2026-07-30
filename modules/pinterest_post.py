@@ -147,6 +147,57 @@ def _upload_image(page, image_path: str):
     page.wait_for_timeout(5000)
 
 
+def _delete_all_drafts(page) -> bool:
+    """Bulk-select and delete every draft in the pin-creation-tool sidebar.
+
+    Returns True if the bulk-select checkbox was found and a delete was
+    attempted, False if no drafts sidebar is present (nothing to clear).
+    Shared by the reactive 50-draft-cap handler and the standalone
+    clear_drafts.py maintenance script.
+    """
+    cb = page.locator('#storyboard-drafts-sidebar-bulk-select-checkbox')
+    try:
+        cb.wait_for(state="visible", timeout=6000)
+    except Exception:
+        return False
+    cb.click()
+    page.wait_for_timeout(1500)
+
+    deleted = False
+    for del_sel in [
+        'button:has-text("Delete all")',
+        'button:has-text("Delete")',
+        '[data-test-id="storyboard-bulk-delete-button"]',
+        '[data-test-id*="delete"]',
+        'button[aria-label*="delete" i]',
+    ]:
+        btn = page.locator(del_sel).first
+        try:
+            if btn.count() and btn.is_visible(timeout=2000):
+                btn.click()
+                page.wait_for_timeout(1000)
+                for confirm_sel in [
+                    'button:has-text("Delete")',
+                    'button:has-text("Yes")',
+                    'button:has-text("Confirm")',
+                    'button:has-text("OK")',
+                ]:
+                    c = page.locator(confirm_sel).first
+                    try:
+                        if c.count() and c.is_visible(timeout=2000):
+                            c.click()
+                            break
+                    except Exception:
+                        pass
+                page.wait_for_timeout(4000)
+                deleted = True
+                break
+        except Exception:
+            continue
+
+    return deleted
+
+
 def _clear_draft_limit(page) -> bool:
     """Detect the 50-draft cap and bulk-delete all drafts to make room.
 
@@ -156,50 +207,15 @@ def _clear_draft_limit(page) -> bool:
     Each failed CI run leaves a draft behind (image uploaded but never published).
     After enough failures the account hits Pinterest's 50-draft ceiling and all
     subsequent uploads fail silently, showing a 50-draft error instead of the
-    form — the root cause of the cascading CI failures.
+    form — the root cause of the cascading CI failures. This is a last-resort
+    safety net; clear_drafts.py runs proactively before every daily run so the
+    cap should not normally be reached at all.
     """
     if not page.locator('text="You have reached the limit of 50 drafts"').count():
         return False
     log.warning("Pinterest 50-draft limit hit — bulk-deleting all saved drafts")
     try:
-        cb = page.locator('#storyboard-drafts-sidebar-bulk-select-checkbox')
-        cb.wait_for(state="visible", timeout=6000)
-        cb.click()
-        page.wait_for_timeout(1500)
-
-        deleted = False
-        for del_sel in [
-            'button:has-text("Delete all")',
-            'button:has-text("Delete")',
-            '[data-test-id="storyboard-bulk-delete-button"]',
-            '[data-test-id*="delete"]',
-            'button[aria-label*="delete" i]',
-        ]:
-            btn = page.locator(del_sel).first
-            try:
-                if btn.count() and btn.is_visible(timeout=2000):
-                    btn.click()
-                    page.wait_for_timeout(1000)
-                    for confirm_sel in [
-                        'button:has-text("Delete")',
-                        'button:has-text("Yes")',
-                        'button:has-text("Confirm")',
-                        'button:has-text("OK")',
-                    ]:
-                        c = page.locator(confirm_sel).first
-                        try:
-                            if c.count() and c.is_visible(timeout=2000):
-                                c.click()
-                                break
-                        except Exception:
-                            pass
-                    page.wait_for_timeout(4000)
-                    deleted = True
-                    break
-            except Exception:
-                continue
-
-        if not deleted:
+        if not _delete_all_drafts(page):
             raise RuntimeError(
                 "Pinterest draft limit (50) reached but delete button not found. "
                 "Delete old drafts manually at pinterest.com/idea-pin-builder/"
