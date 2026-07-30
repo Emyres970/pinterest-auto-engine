@@ -38,6 +38,12 @@ jobs:
         env:
           PINTEREST_COOKIES_B64: ${{ secrets.PINTEREST_COOKIES_B64_ACC2 }}
 
+      - name: Clear Pinterest drafts
+        env:
+          PINTEREST_EMAIL: ${{ secrets.PINTEREST_EMAIL_ACC2 }}
+          PINTEREST_PASSWORD: ${{ secrets.PINTEREST_PASSWORD_ACC2 }}
+        run: python clear_drafts.py
+
       - name: Run automation
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
