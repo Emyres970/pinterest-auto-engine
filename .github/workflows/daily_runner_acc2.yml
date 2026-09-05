@@ -39,6 +39,7 @@ jobs:
           PINTEREST_COOKIES_B64: ${{ secrets.PINTEREST_COOKIES_B64_ACC2 }}
 
       - name: Clear Pinterest drafts
+        continue-on-error: true  # best-effort maintenance — must never block the posting step below
         env:
           PINTEREST_EMAIL: ${{ secrets.PINTEREST_EMAIL_ACC2 }}
           PINTEREST_PASSWORD: ${{ secrets.PINTEREST_PASSWORD_ACC2 }}

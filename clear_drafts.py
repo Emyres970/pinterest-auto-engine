@@ -9,12 +9,18 @@ blocking uploads, which depends on matching Pinterest's current error banner
 text/selectors — if those drift, cleanup gets silently skipped. This script
 clears drafts unconditionally, every run, regardless of how many exist.
 
+This is best-effort maintenance, not a prerequisite for posting: any failure
+here (login hiccup, a slow/timed-out navigation, a changed selector) is
+logged and swallowed so the daily automation still runs. A hard failure in
+this step previously took the whole job down before main.py ever started —
+see git history around 2026-09-04 for the incident this guards against.
+
 Usage:
     python clear_drafts.py
 """
 import logging
 from dotenv import load_dotenv
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
 load_dotenv()
 
@@ -37,7 +43,7 @@ from modules.pinterest_post import (
 )
 
 
-def main():
+def _run():
     with sync_playwright() as p:
         browser = _make_browser(p, headless=True)
         context = _make_context(browser)
@@ -47,15 +53,23 @@ def main():
         if not _is_logged_in(page):
             _login(page)
             if not _is_logged_in(page):
-                log.error(
-                    "Pinterest login failed — cannot clear drafts. "
+                log.warning(
+                    "Pinterest login failed — skipping draft cleanup for this run. "
                     "Run 'python login.py' to refresh your session."
                 )
                 browser.close()
-                raise SystemExit(1)
+                return
             _save_cookies(context)
 
-        page.goto("https://www.pinterest.com/pin-creation-tool/", timeout=45000)
+        for attempt in range(3):
+            try:
+                page.goto("https://www.pinterest.com/pin-creation-tool/", timeout=45000)
+                break
+            except PlaywrightTimeout:
+                if attempt == 2:
+                    raise
+                log.warning(f"pin-creation-tool navigation timed out — retrying ({attempt + 1}/3)")
+                page.wait_for_timeout(3000)
         _wait_load(page)
         page.wait_for_timeout(2000)
 
@@ -68,5 +82,13 @@ def main():
         browser.close()
 
 
+def main():
+    try:
+        _run()
+    except Exception as e:
+        log.warning(f"Draft cleanup failed, continuing anyway: {e}")
+
+
 if __name__ == "__main__":
     main()
+
