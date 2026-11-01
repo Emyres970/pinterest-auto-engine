@@ -24,20 +24,40 @@ def _get_last_posted_index() -> int:
     """Returns the 1-based index of the last successfully posted post, or 0 if none."""
     if not TRACKER_FILE.exists():
         return 0
-    with open(TRACKER_FILE, "r", encoding="utf-8") as f:
-        rows = [r for r in csv.DictReader(f) if r["status"] == "success"]
+    with open(TRACKER_FILE, "r", encoding="utf-8", newline="") as f:
+        rows = [r for r in csv.DictReader(f) if r.get("status") == "success"]
     if not rows:
         return 0
     return int(rows[-1]["post_index"])
 
 
+def get_recent_headlines(post_index: int, limit: int = 30) -> list[str]:
+    """Return recent successful headlines for this article, newest first.
+
+    Reads the existing append-only tracker, so no migration or destructive
+    rewrite of the user's historical CSV is required.
+    """
+    if not TRACKER_FILE.exists():
+        return []
+    matches = []
+    with open(TRACKER_FILE, "r", encoding="utf-8", newline="") as f:
+        for row in csv.DictReader(f):
+            if row.get("status") == "success" and str(row.get("post_index", "")) == str(post_index):
+                headline = (row.get("headline") or "").strip()
+                if headline:
+                    matches.append(headline)
+    return list(reversed(matches[-limit:]))
+
+
 def get_next_posts(count: int) -> list:
     posts = load_posts()
     total = len(posts)
+    if not total or count <= 0:
+        return []
     last = _get_last_posted_index()
     result = []
     for i in range(count):
-        idx = (last + i) % total  # 0-based cycling
+        idx = (last + i) % total  # 0-based cycling from the last 1-based index
         result.append(posts[idx])
     return result
 
