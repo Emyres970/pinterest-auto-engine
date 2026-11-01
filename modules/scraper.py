@@ -1,21 +1,22 @@
 """
 Blogger-first article scraper.
 
-The public scrape_medium_post() name is retained for compatibility with
-main.py. It now delegates to scrape_article(), which supports Blogger pages
-and common article markup.
+Extraction order:
+1. Blogger Atom feed (full post content).
+2. Existing requests/HTML extraction.
+3. Existing Playwright/browser extraction.
 
-Extraction strategy:
-1. Prefer Blogger/article-body containers over generic page wrappers.
-2. Remove navigation, sidebars, comments, sharing widgets, and other chrome.
-3. Extract readable paragraphs and headings without duplicating text.
-4. Try Playwright if the HTTP response is incomplete or unusable.
+Every source is checked for minimum completeness before its content is
+returned to the headline generator. The legacy scrape_medium_post() name
+is retained for compatibility with main.py.
 """
 
 import copy
+import html
 import logging
 import os
 import re
+from urllib.parse import urlparse, urlunparse
 
 import requests
 from bs4 import BeautifulSoup
@@ -30,15 +31,15 @@ _HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
     ),
-    "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/atom+xml,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.9",
     "Connection": "keep-alive",
 }
 
-# Keep the threshold modest. Some legitimate Blogger posts are short.
 _MIN_BODY_CHARS = int(os.getenv("MIN_ARTICLE_CHARS", "300"))
+_MIN_BODY_WORDS = int(os.getenv("MIN_ARTICLE_WORDS", "120"))
+_MIN_PARAGRAPHS = int(os.getenv("MIN_ARTICLE_PARAGRAPHS", "3"))
 
-# These selectors are checked in priority order.
 _CONTENT_SELECTORS = (
     ".post-body",
     "[itemprop='articleBody']",
@@ -89,9 +90,20 @@ _REMOVE_SELECTORS = (
 
 def _clean_text(value: str) -> str:
     """Normalize whitespace without flattening paragraph boundaries."""
-    value = value.replace("\xa0", " ")
+    value = (value or "").replace("\xa0", " ")
     value = re.sub(r"[ \t\r\f\v]+", " ", value)
     return value.strip()
+
+
+def _word_count(body: str) -> int:
+    return len(re.findall(r"\b[\w’'-]+\b", body or ""))
+
+
+def _paragraph_count(body: str) -> int:
+    return len([
+        part for part in re.split(r"\n\s*\n", body or "")
+        if len(part.strip()) >= 25
+    ])
 
 
 def _extract_title(soup: BeautifulSoup) -> str:
@@ -127,20 +139,13 @@ def _remove_page_chrome(container):
             for element in container.select(selector):
                 element.decompose()
         except Exception:
-            # A malformed selector or unusual HTML should not stop extraction.
             continue
 
     return container
 
 
 def _extract_container_text(container, title: str = "") -> str:
-    """
-    Extract paragraphs and structural text from one candidate container.
-
-    Paragraphs are preferred. Headings and blockquotes are retained because
-    they often carry important article structure. List items are included
-    when they contain meaningful text.
-    """
+    """Extract paragraphs and structural text from one article container."""
     container = _remove_page_chrome(copy.deepcopy(container))
 
     elements = container.find_all(
@@ -160,7 +165,6 @@ def _extract_container_text(container, title: str = "") -> str:
         if text.casefold() == normalized_title:
             continue
 
-        # Avoid repeated text caused by nested or duplicated markup.
         key = re.sub(r"\W+", " ", text.casefold()).strip()
         if not key or key in seen:
             continue
@@ -168,8 +172,6 @@ def _extract_container_text(container, title: str = "") -> str:
         seen.add(key)
         parts.append(text)
 
-    # Some Blogger themes use divs instead of paragraphs.
-    # Use plain container text only when structural extraction found nothing.
     if not parts:
         text = _clean_text(container.get_text(" ", strip=True))
         if text and text.casefold() != normalized_title:
@@ -179,34 +181,29 @@ def _extract_container_text(container, title: str = "") -> str:
 
 
 def _candidate_score(body: str, selector_priority: int) -> float:
-    """
-    Rank candidate containers.
-
-    Longer, paragraph-rich containers score better. Selector priority gives
-    Blogger's .post-body and articleBody markup an advantage over generic
-    article/main wrappers.
-    """
+    """Prefer long, paragraph-rich Blogger article containers."""
     if not body:
         return 0
 
-    paragraphs = [p for p in body.split("\n\n") if len(p.strip()) >= 35]
-    length_score = min(len(body), 12000) / 100
-    paragraph_score = min(len(paragraphs), 30) * 2
+    paragraphs = [
+        p for p in body.split("\n\n")
+        if len(p.strip()) >= 35
+    ]
+
+    length_score = min(len(body), 20000) / 100
+    paragraph_score = min(len(paragraphs), 40) * 2
     priority_bonus = max(0, 10 - selector_priority) * 3
 
     return length_score + paragraph_score + priority_bonus
 
 
-def _parse_html(html: str) -> dict:
+def _parse_html(html_text: str) -> dict:
     """
-    Parse a page and return:
-        {"title": str, "body": str}
+    Parse a rendered Blogger page.
 
     A generic page <body> is deliberately not used as the article container.
-    Doing so can silently feed navigation, widgets, and sidebar text to the
-    headline model.
     """
-    soup = BeautifulSoup(html or "", "html.parser")
+    soup = BeautifulSoup(html_text or "", "html.parser")
     title = _extract_title(soup)
 
     candidates = []
@@ -214,18 +211,21 @@ def _parse_html(html: str) -> dict:
 
     for priority, selector in enumerate(_CONTENT_SELECTORS):
         for container in soup.select(selector):
-            # Avoid evaluating the same underlying element more than once.
             identity = id(container)
             if identity in seen_containers:
                 continue
-            seen_containers.add(identity)
 
+            seen_containers.add(identity)
             body = _extract_container_text(container, title)
+
             if not body:
                 continue
 
-            score = _candidate_score(body, priority)
-            candidates.append((score, body, selector))
+            candidates.append((
+                _candidate_score(body, priority),
+                body,
+                selector,
+            ))
 
     if not candidates:
         return {"title": title, "body": ""}
@@ -234,25 +234,212 @@ def _parse_html(html: str) -> dict:
     _, body, selected_selector = candidates[0]
 
     log.debug(
-        "Article container selected: %s (%s characters)",
+        "HTML article container: %s; %s words; %s paragraphs",
         selected_selector,
-        len(body),
+        _word_count(body),
+        _paragraph_count(body),
     )
 
     return {"title": title, "body": body}
 
 
-def _is_usable(data: dict) -> bool:
-    """Check whether the extracted page has enough usable article content."""
-    return bool(
-        data
-        and data.get("title")
-        and len(data.get("body", "").strip()) >= _MIN_BODY_CHARS
+def _normalise_article_url(url: str) -> str:
+    """Normalize URLs for matching Blogger feed entries."""
+    parsed = urlparse(url)
+    path = parsed.path.rstrip("/") or "/"
+
+    return urlunparse((
+        parsed.scheme.lower(),
+        parsed.netloc.lower(),
+        path,
+        "",
+        "",
+        "",
+    ))
+
+
+def _feed_url_for_article(article_url: str) -> str:
+    """Build the Atom feed URL for the article's Blogger host."""
+    parsed = urlparse(article_url)
+
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError("Article URL must be an absolute HTTP(S) URL.")
+
+    return (
+        f"{parsed.scheme}://{parsed.netloc}"
+        "/feeds/posts/default?alt=atom&max-results=500"
     )
 
 
+def _extract_feed_entry_body(content_value: str) -> str:
+    """Convert Blogger's Atom content HTML into readable article text."""
+    decoded = html.unescape(content_value or "")
+    soup = BeautifulSoup(decoded, "html.parser")
+
+    _remove_page_chrome(soup)
+
+    elements = soup.find_all(
+        ["p", "h2", "h3", "h4", "blockquote", "li"]
+    )
+
+    parts = []
+    seen = set()
+
+    for element in elements:
+        text = _clean_text(element.get_text(" ", strip=True))
+
+        if not text or len(text) < 20:
+            continue
+
+        key = re.sub(r"\W+", " ", text.casefold()).strip()
+        if key and key not in seen:
+            seen.add(key)
+            parts.append(text)
+
+    if not parts:
+        text = _clean_text(soup.get_text(" ", strip=True))
+        if text:
+            parts.append(text)
+
+    return "\n\n".join(parts)
+
+
+def _scrape_with_blogger_feed(url: str):
+    """
+    Retrieve the exact article from Blogger's Atom feed.
+
+    Blogger's <content> element is used, not its <summary> element. A
+    summary-only feed is therefore not mistaken for a complete article.
+    """
+    try:
+        feed_url = _feed_url_for_article(url)
+
+        response = requests.get(
+            feed_url,
+            headers=_HEADERS,
+            timeout=30,
+            allow_redirects=True,
+        )
+        response.raise_for_status()
+
+        soup = BeautifulSoup(response.text, "xml")
+        entries = soup.find_all("entry")
+
+        if not entries:
+            log.warning("Blogger feed returned no entries: %s", feed_url)
+            return None
+
+        requested_url = _normalise_article_url(url)
+
+        for entry in entries:
+            alternate_links = entry.find_all(
+                "link",
+                attrs={"rel": "alternate"},
+            )
+
+            entry_urls = [
+                _normalise_article_url(link.get("href", ""))
+                for link in alternate_links
+                if link.get("href")
+            ]
+
+            if requested_url not in entry_urls:
+                continue
+
+            title_tag = entry.find("title")
+            title = _clean_text(
+                title_tag.get_text(" ", strip=True) if title_tag else ""
+            )
+
+            content_tag = entry.find("content")
+            if content_tag is None:
+                log.warning(
+                    "Blogger feed matched the post but contained no full "
+                    "<content> element. It may be summary-only."
+                )
+                return None
+
+            content_value = (
+                content_tag.string
+                if content_tag.string is not None
+                else content_tag.get_text()
+            )
+
+            body = _extract_feed_entry_body(content_value)
+
+            result = {
+                "title": title,
+                "body": body,
+                "source": "blogger_atom_feed",
+            }
+
+            valid, reason = _validate_article(result)
+
+            if not valid:
+                log.warning(
+                    "Blogger feed matched the post but failed completeness "
+                    "validation: %s",
+                    reason,
+                )
+                return None
+
+            log.info(
+                "Blogger feed extraction: %s words, %s paragraphs",
+                _word_count(body),
+                _paragraph_count(body),
+            )
+            return result
+
+        log.warning(
+            "Requested article was not found in Blogger feed: %s",
+            requested_url,
+        )
+
+    except Exception as exc:
+        log.warning("Blogger feed extraction failed: %s", exc)
+
+    return None
+
+
+def _validate_article(data: dict) -> tuple[bool, str]:
+    """Reject empty, obviously truncated, or structurally incomplete text."""
+    if not data:
+        return False, "No extraction result."
+
+    title = _clean_text(data.get("title", ""))
+    body = (data.get("body") or "").strip()
+
+    if not title:
+        return False, "Article title is missing."
+
+    if len(body) < _MIN_BODY_CHARS:
+        return False, (
+            f"Only {len(body)} characters; minimum is {_MIN_BODY_CHARS}."
+        )
+
+    words = _word_count(body)
+    if words < _MIN_BODY_WORDS:
+        return False, (
+            f"Only {words} words; minimum is {_MIN_BODY_WORDS}."
+        )
+
+    paragraphs = _paragraph_count(body)
+    if paragraphs < _MIN_PARAGRAPHS:
+        return False, (
+            f"Only {paragraphs} substantial paragraphs; "
+            f"minimum is {_MIN_PARAGRAPHS}."
+        )
+
+    return True, "passed"
+
+
+def _is_usable(data: dict) -> bool:
+    valid, _ = _validate_article(data)
+    return valid
+
+
 def _scrape_with_requests(url: str):
-    """Fast extraction path using requests."""
+    """Existing fast HTML extraction fallback."""
     try:
         response = requests.get(
             url,
@@ -263,28 +450,27 @@ def _scrape_with_requests(url: str):
         response.raise_for_status()
 
         data = _parse_html(response.text)
+        valid, reason = _validate_article(data)
 
-        if _is_usable(data):
+        if valid:
+            data["source"] = "requests_html"
             log.info(
-                "  HTTP extraction: %s characters",
-                len(data["body"]),
+                "HTTP extraction passed: %s words, %s paragraphs",
+                _word_count(data["body"]),
+                _paragraph_count(data["body"]),
             )
             return data
 
-        log.warning(
-            "  HTTP extraction looked incomplete (%s characters); "
-            "trying browser rendering.",
-            len(data.get("body", "")),
-        )
+        log.warning("HTTP extraction incomplete: %s", reason)
 
     except Exception as exc:
-        log.warning("  HTTP scraping failed: %s", exc)
+        log.warning("HTTP scraping failed: %s", exc)
 
     return None
 
 
 def _scrape_with_playwright(url: str) -> dict:
-    """Browser-rendered fallback for pages that need JavaScript."""
+    """Existing browser-rendered fallback."""
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(
             headless=True,
@@ -311,7 +497,6 @@ def _scrape_with_playwright(url: str) -> dict:
                 timeout=45000,
             )
 
-            # Give Blogger's theme and deferred content a moment to render.
             try:
                 page.wait_for_selector(
                     ".post-body, [itemprop='articleBody'], "
@@ -322,16 +507,15 @@ def _scrape_with_playwright(url: str) -> dict:
                 log.debug("No known article selector appeared before timeout.")
 
             page.wait_for_timeout(1500)
-
-            # Trigger lazy-loaded content near the bottom of the article.
             page.evaluate(
                 "window.scrollTo(0, document.body.scrollHeight)"
             )
             page.wait_for_timeout(1000)
             page.evaluate("window.scrollTo(0, 0)")
 
-            html = page.content()
-            return _parse_html(html)
+            data = _parse_html(page.content())
+            data["source"] = "playwright_html"
+            return data
 
         finally:
             browser.close()
@@ -339,62 +523,80 @@ def _scrape_with_playwright(url: str) -> dict:
 
 def scrape_article(url: str) -> dict:
     """
-    Scrape a Blogger/article URL.
+    Extract and validate a complete Blogger article.
 
-    Returns:
-        {
-            "title": "Article title",
-            "body": "Full extracted article text"
-        }
-
-    Raises ValueError when a usable title/body cannot be extracted.
+    Returns title, body and extraction diagnostics. Raises ValueError if
+    every extraction method fails validation.
     """
     if not url or not isinstance(url, str):
         raise ValueError("A valid article URL is required.")
 
-    log.info("  Scraping  : %s", url[:120])
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise ValueError(f"Invalid article URL: {url}")
 
-    data = _scrape_with_requests(url)
-    extraction_method = "requests"
+    log.info("  Scraping  : %s", url[:150])
 
-    if not data:
-        log.info("  Switching to Playwright...")
-        data = _scrape_with_playwright(url)
-        extraction_method = "Playwright"
-
-    if not data.get("title"):
-        raise ValueError(
-            f"Could not extract an article title from: {url}"
-        )
-
-    body = data.get("body", "").strip()
-
-    if len(body) < _MIN_BODY_CHARS:
-        raise ValueError(
-            f"Article extraction returned only {len(body)} characters "
-            f"(minimum: {_MIN_BODY_CHARS}). The page may be blocked, "
-            f"the article markup may have changed, or the post may be short: "
-            f"{url}"
-        )
-
-    log.info(
-        "  Scraped   : '%s' via %s (%s characters)",
-        data["title"][:70],
-        extraction_method,
-        len(body),
+    methods = (
+        ("Blogger feed", _scrape_with_blogger_feed),
+        ("HTTP", _scrape_with_requests),
+        ("Playwright", _scrape_with_playwright),
     )
 
-    return {
-        "title": data["title"].strip(),
-        "body": body,
-    }
+    failures = []
+
+    for method_name, method in methods:
+        try:
+            data = method(url)
+
+            if not data:
+                failures.append(f"{method_name}: no article returned")
+                continue
+
+            valid, reason = _validate_article(data)
+
+            if not valid:
+                failures.append(f"{method_name}: {reason}")
+                log.warning(
+                    "%s result rejected: %s",
+                    method_name,
+                    reason,
+                )
+                continue
+
+            body = data["body"].strip()
+            words = _word_count(body)
+            paragraphs = _paragraph_count(body)
+
+            log.info(
+                "  Scraped   : '%s' via %s (%s words, %s paragraphs)",
+                data["title"][:70],
+                data.get("source", method_name),
+                words,
+                paragraphs,
+            )
+
+            return {
+                "title": data["title"].strip(),
+                "body": body,
+                "source": data.get("source", method_name),
+                "word_count": words,
+                "paragraph_count": paragraphs,
+            }
+
+        except Exception as exc:
+            failures.append(f"{method_name}: {exc}")
+            log.exception("%s extraction raised an exception.", method_name)
+
+    detail = " | ".join(failures)
+
+    raise ValueError(
+        "No extraction method produced a sufficiently complete article. "
+        "The headline generator was not called. "
+        f"Diagnostics: {detail}. URL: {url}"
+    )
 
 
 def scrape_medium_post(friend_link: str) -> dict:
-    """
-    Backwards-compatible function name used by main.py.
-
-    The argument is now a Blogger URL in the current pipeline. The old name
-    remains so existing imports and callers do not need to change.
-    """
+    """Backward-compatible name retained for the existing main.py import."""
     return scrape_article(friend_link)
