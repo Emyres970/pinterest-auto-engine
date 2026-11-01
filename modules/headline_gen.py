@@ -1211,6 +1211,7 @@ def generate_headline(
         candidates,
         evaluations,
     )
+        generated["candidates"] = candidates
 
     log.info(
         "  Evaluated : %s approved out of %s",
