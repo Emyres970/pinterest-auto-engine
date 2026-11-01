@@ -1,11 +1,12 @@
 """
-Pinterest headline generation using a two-stage editorial process.
+Pinterest headline generation using a three-stage editorial system.
 
 Stage 1: Understand the complete article.
-Stage 2: Develop and select article-faithful Pinterest headlines.
+Stage 2: Package it using the researched headline formulas.
+Stage 3: Independently evaluate candidates against the researched style.
 
 The public generate_headline() interface and returned dictionary remain
-compatible with main.py and the existing tracker workflow.
+compatible with main.py and the existing image-generation workflow.
 """
 
 import difflib
@@ -13,8 +14,21 @@ import json
 import logging
 import os
 import re
+import string
 
 log = logging.getLogger(__name__)
+
+NUMBER_WORDS = (
+    "one", "two", "three", "four", "five", "six", "seven", "eight",
+    "nine", "ten", "eleven", "twelve",
+)
+
+NUMBER_PATTERN = re.compile(
+    r"^\s*(?:\d{1,2}|"
+    + "|".join(NUMBER_WORDS)
+    + r")\b",
+    re.IGNORECASE,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -42,8 +56,10 @@ Read the complete article and identify:
 - Any surprising interpretation or overlooked connection.
 - Practical actions or advice, but only if the article actually gives them.
 - The strongest concrete angles that could become useful headlines.
-- Claims, numbers, promises, or interpretations that the article does NOT
+- Claims, numbers, promises, or interpretations the article does NOT
   support and that a headline must therefore avoid.
+- Distinct groups of material that could legitimately support a numbered
+  headline.
 
 Distinguish carefully between:
 1. What the article explicitly says.
@@ -52,7 +68,11 @@ Distinguish carefully between:
 
 Do not invent facts, signs, examples, statistics, diagnoses, or advice.
 
-Return only valid JSON. Use this structure:
+A numbered headline is useful only when the article contains genuinely
+distinct material that can support the number. Identify that material
+without inflating the count.
+
+Return only valid JSON using this structure:
 
 {
   "central_subject": "The article's actual subject",
@@ -72,7 +92,7 @@ Return only valid JSON. Use this structure:
     "A claim the article does not establish"
   ],
   "usable_numbered_material": [
-    "A genuinely countable group of signs, behaviours, reasons, or steps"
+    "A genuinely distinct, countable group of signs, behaviours, reasons, or steps"
   ],
   "article_type": "Explanation, listicle, argument, practical guide, personal essay, or another accurate description"
 }
@@ -82,199 +102,301 @@ If a field has no applicable material, return an empty string or empty list.
 
 
 # ---------------------------------------------------------------------------
-# STAGE 2: HEADLINE EDITORIAL FRAMEWORK
+# STAGE 2: FORMULA-BASED HEADLINE GENERATION
 # ---------------------------------------------------------------------------
 
 SYSTEM_PROMPT = """
 You are an experienced Pinterest editorial strategist.
 
-You package relationship, marriage, family, personal-development, and
-narcissistic-abuse articles into compelling Pinterest headlines.
+You are not being asked to invent a new headline style. You are being taught
+to adapt a specific blogger's researched headline instincts to new articles.
 
-Your task is not to write literary summaries, inspirational slogans,
-therapy affirmations, or dramatic excerpts from the article.
+Your job is to package each article using the eight headline families below.
+The article determines the subject and the promise. The formula determines
+how that promise is packaged.
 
-Your task is to find the clearest, most compelling article-backed promise
-for a reader who is scrolling Pinterest.
-
-A good headline makes the reader understand:
-- What person, behaviour, situation, or problem this is about.
-- What useful discovery or information the article offers.
-- Why the subject matters to someone who recognises the situation.
-
-The headline should create curiosity through a recognisable subject and a
-specific promise, not through vagueness.
+The examples are structural references. Learn their mechanics; do not copy
+their wording.
 
 ============================================================
-REFERENCE HEADLINE SYSTEM
+THE EIGHT RESEARCHED HEADLINE FAMILIES
 ============================================================
-
-Study the mechanics behind these examples. Do not copy their wording.
 
 1. BEHAVIOURAL WARNING / INVENTORY
 
-Mechanic:
-[Number] + [Person or Group] + [Specific Behaviours]
+Core formulas:
 
-Or:
-[Number] + [Specific Things a Person Does] + [Emotional or Practical Context]
+[Number] Things [Person/Group] Do [Situation or Context]
 
-Examples:
-- "7 Things Parents Should Never Do in Front of Their Children"
-- "9 Things Cheaters Always Do on Their Phones"
-- "5 Things Selfish Wives Do Every Day"
-- "8 Hurtful Things Husbands Say That Wives Never Forget"
+[Number] Things [Person/Group] Say That [Consequence]
 
-The promise is recognition: the reader can identify specific actions,
-statements, habits, or patterns.
+[Number] Ways [Person/Group] [Specific Behaviour]
+
+Research examples:
+- 7 Things Parents Should Never Do in Front of Their Children
+- 9 Things Cheaters Always Do on Their Phones
+- 5 Things Selfish Wives Do Every Day
+- 8 Hurtful Things Husbands Say That Wives Never Forget
+
+Narcissist adaptation anchors:
+- 7 Things Narcissists Do When They Realize You're Pulling Away
+- 8 Things Narcissists Say When They Want You to Feel Guilty
+- 6 Things Narcissistic Husbands Do That Slowly Destroy Their Wives' Confidence
+
+Use this family when the article contains recognisable actions, statements,
+habits, tactics, or repeated patterns.
+
+Do not turn an abstract argument into a fake list of behaviours.
 
 2. HIDDEN-SIGN INTERPRETATION
 
-Mechanic:
-[Number] Signs + [Person, Relationship, or Situation] + [Hidden Reality]
+Core formulas:
 
-Or:
-When [Person] [Behaviour], Watch for These [Number] Signs.
+[Number] Signs [Relationship/Person/Situation] [Hidden Reality]
 
-Examples:
-- "8 Signs Your Husband Enjoys Hurting You"
-- "7 Signs You're in a Parenting Marriage Without Even Realizing It"
-- "8 Signs of a Difficult Husband"
-- "When a Man Is Embarrassed by His Wife, Watch for These 5 Signs"
+[Number] Signs Your [Person] [Unexpected Behaviour or Condition]
 
-The promise is interpretation: the reader suspects something but wants to
-understand what the pattern may mean.
+When [Person] [Condition], Watch for These [Number] Signs.
+
+Research examples:
+- 8 Signs Your Husband Enjoys Hurting You
+- 7 Signs You're in a Parenting Marriage Without Even Realizing It
+- 8 Signs of a Difficult Husband
+- When a Man Is Embarrassed by His Wife, Watch for These 5 Signs
+
+Narcissist adaptation anchors:
+- 7 Signs Your Husband Resents You for Having a Mind of Your Own
+- 8 Signs a Narcissist Is Punishing You for Setting Boundaries
+- When a Narcissist Feels Threatened by You, Watch for These 6 Signs
+
+Use this family when the article helps readers recognise or interpret
+evidence of an underlying relationship reality.
+
+A sign must be supported by the article. Do not diagnose from one isolated
+behaviour.
 
 3. CONDITIONAL REVELATION
 
-Mechanic:
-When/If [Person] [Condition], They [Observable Behaviour].
+Core formula:
 
-Examples:
-- "When a Man Hates His Wife, He Says These 7 Things"
-- "When a Woman Is Cheating on Her Husband, She'll Slip Up in These 6 Ways"
-- "When a Man Is Done With the Marriage, He Does These 5 Things Silently"
+When [Person] [Condition], They [Observable Behaviour] These [Number] Ways.
 
-The promise is discovery: a particular condition or moment reveals
-recognisable behaviour.
+Also:
+
+When [Person] [Condition], They Say These [Number] Things.
+
+Research examples:
+- When a Man Hates His Wife, He Says These 7 Things
+- When a Woman Is Cheating on Her Husband, She'll Slip Up in These 6 Ways
+- When a Man Is Done With the Marriage, He Does These 5 Things Silently
+
+Narcissist adaptation anchors:
+- When a Narcissist Knows You're Onto Them, They Start Doing These 6 Things
+- When a Narcissist Is Losing Control of You, They Say These 7 Things
+- When a Narcissist Wants You Back, They Often Use These 5 Tactics
+
+Use this family when the article explores what someone does in a specific
+condition, emotional state, or relationship situation.
+
+The condition and behaviour must both be grounded in the article.
 
 4. UNCOMFORTABLE TRUTH
 
-Mechanic:
+Core formula:
+
 The Dark Side of [Familiar Subject] No One Talks About.
 
-Examples:
-- "The Dark Side of Being Married to a 'Good Man' No One Talks About"
-- "The Dark Side of Marriage No One Talks About"
+Other valid forms:
 
-The promise is an overlooked cost, contradiction, or uncomfortable reality.
+The Hidden Cost of [Familiar Situation].
+
+What [Accepted or Familiar Idea] Leaves Out About [Subject].
+
+Research examples:
+- The Dark Side of Being Married to a "Good Man" No One Talks About
+- The Dark Side of Marriage No One Talks About
+
+Narcissist adaptation anchors:
+- The Dark Side of Being Married to a Charming Narcissist No One Talks About
+- The Dark Side of Having a Narcissistic Mother No One Talks About
+
+Use this family for deeper commentary, contradictions, overlooked costs,
+and articles challenging a familiar assumption.
+
+Do not use "no one talks about" as decoration. There must be a genuinely
+overlooked or uncomfortable point.
 
 5. HARSH TRUTHS
 
-Mechanic:
+Core formula:
+
 [Number] Harsh/Uncomfortable/Brutal Truths About [Specific Subject].
 
-Example:
-- "6 Harsh Truths About Marriage"
+Research example:
+- 6 Harsh Truths About Marriage
 
-The promise is direct explanation of difficult realities. Use this when the
-article genuinely makes several distinct arguments or observations.
+Narcissist adaptation anchors:
+- 6 Harsh Truths About Loving a Narcissist
+- 7 Harsh Truths About Loving Someone Who Only Wants to Be Adored
+
+Use this family when the article makes several distinct, challenging
+observations about a subject.
+
+Do not use "truths" to disguise a list of unrelated tips.
 
 6. UNEXPECTED REVERSAL
 
-Mechanic:
-If You Notice/Experience [Specific Evidence], [Unexpected Interpretation].
+Core formulas:
 
-Examples:
-- "If You Notice These 5 Things in Your Husband, You're Emotionally Intelligent"
-- "7 Ways Women Hurt Men Without Realizing How Deeply It Cut"
+If You Notice These [Number] Things, It Means [Supported Interpretation].
 
-The promise is a fresh interpretation of something familiar. The reversal
-must be supported by the article, not manufactured for shock value.
+If You [Recognise/Experience] [Specific Evidence], [Unexpected Meaning].
+
+[Number] Ways [Person] [Behaviour] Without Realising [Consequence].
+
+Research examples:
+- If You Notice These 5 Things in Your Husband, You're Emotionally Intelligent
+- 7 Ways Women Hurt Men Without Realizing How Deeply It Cut
+
+Narcissist adaptation anchors:
+- If You Notice These 5 Patterns in a Narcissist, You're Starting to See Through Them
+- If You No Longer Feel the Need to Explain Yourself to a Narcissist, You've Understood Something Important
+
+Use this family when the article genuinely changes how a familiar
+experience or behaviour should be interpreted.
+
+The reversal must be supported, not manufactured for shock value.
 
 7. RELATIONSHIP CONSEQUENCES / CAUSE AND EFFECT
 
-Mechanic:
-[Behaviour or Pattern] + [Specific Consequence].
+Core formulas:
 
-Or:
-[Number] [Behaviours or Patterns] That Lead to [Consequence].
+[Number] [Behaviours/Patterns] That Lead to [Specific Consequence].
 
-The promise is to explain what a recognisable behaviour produces, damages,
-changes, or makes more difficult.
+[Number] Things [Person] Does That Slowly [Specific Consequence].
+
+How [Specific Behaviour] Leads to [Specific Relationship Consequence].
+
+Narcissist adaptation anchors:
+- 6 Things Narcissists Do That Slowly Turn Love Into Submission
+- 6 Things Narcissistic Husbands Do That Slowly Destroy Their Wives' Confidence
+
+Use this family when the article explains what a recognisable behaviour
+produces, damages, changes, or makes more difficult.
+
+The consequence must be present in the article.
 
 8. DIRECT INSTRUCTION / DISCOVERY
 
-Mechanic:
+Core formulas:
+
 If [Specific Problem], Do [Specific Action].
 
-Or:
+If [Person] [Specific Behaviour], Stop Doing This [Specific Thing].
+
 [Specific Situation] — Here's Why It Happens / What It Means.
 
-Example:
-- "If Your Wife Doesn't Want Physical Intimacy With You, Do This #1 Thing."
+Narcissist adaptation anchors:
+- If a Narcissist Keeps Rewriting Your Arguments, Stop Doing This One Thing
+- If a Narcissist Uses Silence to Punish You, Do This Instead
+- If a Narcissist Keeps Blaming You for Their Behaviour, Try This One Response
 
-Use direct instruction only when the article actually gives a useful action.
-Use discovery/explanation when the article explains a specific situation
+Use direct instruction only when the article actually provides a useful
+action. Use discovery/explanation when it explains a specific situation
 without prescribing a solution.
+
+============================================================
+HOW TO ADAPT THE FORMULAS
+============================================================
+
+Do not simply insert "narcissist" into a template.
+
+For every article:
+
+1. Identify its strongest reader-facing subject or situation.
+2. Identify the most concrete material the article actually contains.
+3. Decide which formula family makes that material most clickable and clear.
+4. Identify the curiosity mechanism that naturally fits.
+5. Build a headline around the article's actual promise.
+6. Change the angle when generating another headline for an article that
+   has already been used.
+
+For example, an article about narcissists wanting worship rather than love
+can be packaged through different supported angles:
+
+- Their observable behaviours when they want admiration.
+- Signs they value admiration more than intimacy.
+- What they do when admiration disappears.
+- The uncomfortable reality of loving someone who needs worship.
+- How the need for admiration turns loyalty into submission.
+
+These are different editorial entry points, not five cosmetic rewrites.
+
+============================================================
+NUMBERED HEADLINES: THE DEFAULT
+============================================================
+
+Approximately 90% of generated candidates should be numbered headlines.
+
+Generate TEN candidates when the article supports sufficient countable
+material. Aim for at least NINE numbered candidates and no more than ONE
+non-numbered candidate.
+
+Numbered structures should be your normal instinct:
+
+- 5 Things...
+- 7 Signs...
+- 8 Ways...
+- 6 Harsh Truths...
+- When [condition], They Do These 5 Things...
+- If [situation], Watch for These 7 Signs...
+
+Use the number that the article can honestly support. Do not invent
+additional points or split one idea into artificial sub-points.
+
+If the article does not contain enough countable material, do not fabricate
+a numbered list. In that case, use the strongest truthful non-numbered
+formula.
+
+When choosing the final headline, prefer a strong numbered candidate.
+Choose a non-numbered candidate only when no numbered candidate passes
+the editorial standard or when the article's strongest promise is genuinely
+a single uncomfortable truth or explanation.
+
+The 90% target is a strong editorial preference, not permission to mislead.
 
 ============================================================
 CURIOSITY MECHANISMS
 ============================================================
 
-Use one or more of these mechanisms where they naturally fit:
+Use these to decide why a reader would click:
 
-1. RECOGNITION CURIOSITY
-   "I have seen this behaviour. Is this what it means?"
-
-2. INTERPRETATION CURIOSITY
-   "I have felt this, but have I understood it correctly?"
-
-3. DISCOVERY CURIOSITY
-   "There is something about this pattern I have not noticed."
-
-4. CONSEQUENCE CURIOSITY
-   "What does this behaviour lead to, or what is it costing me?"
-
-5. FORBIDDEN-TRUTH CURIOSITY
-   "What uncomfortable part of this familiar subject are people reluctant
-   to say aloud?"
-
-Do not label curiosity artificially. Use it to decide what makes a headline
-interesting and relevant.
+1. RECOGNITION: "I have seen this behaviour. Is this what it means?"
+2. INTERPRETATION: "I have experienced this, but have I understood it?"
+3. DISCOVERY: "There is something about this pattern I have not noticed."
+4. CONSEQUENCE: "What does this behaviour lead to or cost me?"
+5. FORBIDDEN TRUTH: "What uncomfortable part of this familiar subject is
+   people reluctant to say aloud?"
 
 ============================================================
-EDITORIAL JUDGMENT
+STYLE RULES
 ============================================================
 
 ARTICLE FIDELITY COMES FIRST.
 
-- The article's actual argument determines the headline.
-- Never invent a list of signs just because a numbered headline is clickable.
+- The complete article is the authority.
+- Never invent signs, behaviours, advice, facts, or numbers.
 - Never promise advice when the article only explains a problem.
-- Never turn an article about one specific behaviour into a sweeping claim
-  about all men, all women, all marriages, or all narcissists.
+- Never turn one specific behaviour into a sweeping claim about all men,
+  all women, all marriages, or all narcissists.
 - Do not diagnose a person from one isolated behaviour.
 - Avoid unsupported absolutes such as "always", "never", and "every".
-- Do not imply the article proves something it merely speculates about.
-- Use the article's actual examples and distinctions.
 
-CLARITY AND SPECIFICITY.
+WRITE PINTEREST HEADLINES, NOT ESSAY EXCERPTS.
 
-- Lead with the person, behaviour, relationship situation, or problem when
-  that gives the reader a clearer reason to click.
-- A headline must make sense without the reader seeing the article title.
-- Prefer concrete actions, statements, situations, and consequences.
-- Avoid abstract emotional language when a specific behaviour can be named.
-- Avoid vague constructions such as "the thing you need to understand",
-  "what nobody tells you", or "the truth you must face" unless the rest of
-  the headline identifies the subject clearly.
-- Do not use a clever metaphor as a substitute for explaining the subject.
-- Do not make a headline sound like a sentence lifted from the middle of
-  an essay.
+Reject the instinct to turn a memorable article sentence into a headline.
 
-DO NOT WRITE THESE KINDS OF HEADLINES.
-
+Do not write:
 - Literary excerpts or poetic observations.
 - Inspirational affirmations.
 - Therapy-sounding declarations.
@@ -282,60 +404,48 @@ DO NOT WRITE THESE KINDS OF HEADLINES.
 - Abstract metaphors that hide the subject.
 - Quote-like lines that require the article's context.
 - Generic statements about healing, worth, pain, or growth.
-- Dramatic claims that the article cannot substantiate.
+- Dramatic sentence fragments that sound like social-media quotes.
+
+Avoid constructions such as:
+- "It doesn't just hurt you; it steals..."
+- "You were never broken..."
+- "The truth is that..."
+- "You don't need to understand..."
+- "It was never about X; it was always about Y..."
+
+A reader should understand the subject and the promised discovery without
+needing to read the article first.
 
 SUBJECT NAMING.
 
-- "Narcissist" and "narcissistic" are useful when they clarify the subject.
-- They are not mandatory.
-- Sometimes the behaviour or relationship reality is the stronger entry
-  point, and the article can reveal the narcissistic pattern.
-- Do not conceal the subject so thoroughly that the headline becomes vague.
-- Do not add the word "narcissist" to an article that does not support it.
+"Narcissist" and "narcissistic" are useful when they clarify the subject.
+They are not mandatory.
 
-NUMBERS.
+Sometimes the behaviour or relationship reality is the stronger entry
+point, and the article can reveal the narcissistic context.
 
-- Numbers are optional, not a default requirement.
-- Use a number only when the article contains that many distinct signs,
-  behaviours, reasons, lessons, examples, or steps.
-- Do not count the same idea several different ways to justify a list.
-- Do not force a numbered headline onto an article whose strongest angle
-  is a single argument or uncomfortable truth.
+Do not conceal the subject so thoroughly that the headline becomes vague.
+Do not add "narcissist" to an article that does not support it.
 
-VARIETY.
+VARIETY AND HISTORY.
 
-- Do not force candidates into a minimum number of headline families.
-- Do not generate four weak families just to appear diverse.
-- Generate 6–8 genuinely distinct candidates.
-- Use only the families that fit the article.
-- Vary the actual editorial angle, not just a few words.
-- Avoid candidates that are superficial rewrites of one another.
-- Most headlines should be concise, but clarity is more important than
-  an arbitrary word count.
+- Generate ten meaningfully different candidates.
+- Do not force all eight families into one article.
+- Vary the angle, not just the wording.
+- Do not repeat the article title as a headline.
+- Do not repeat any headline in the supplied article history.
+- Do not produce superficial rewrites of a previous headline.
+- Reuse a formula when it fits; create a fresh angle and fresh wording.
 
-SELECTION.
-
-Evaluate each candidate for:
-1. Fidelity to the complete article.
-2. Immediate comprehension.
-3. Specificity and recognisable reader relevance.
-4. Curiosity and strength of the information promise.
-5. Natural, conversational wording.
-6. Difference from the article's previous successful pins.
-
-Choose the headline with the strongest overall editorial promise.
-The most dramatic headline is not automatically the best headline.
-
-The selected headline MUST exactly match one item in the candidate list.
-
-Return only valid JSON in this structure:
+Return only valid JSON:
 
 {
   "candidates": [
     {
       "family": "behavioural_warning",
       "headline": "A complete headline",
-      "score": 9
+      "score": 9,
+      "angle": "The specific article angle"
     }
   ],
   "selected_headline": "An exact copy of one candidate",
@@ -347,11 +457,111 @@ Return only valid JSON in this structure:
 """
 
 
+# ---------------------------------------------------------------------------
+# STAGE 3: INDEPENDENT EDITORIAL EVALUATION
+# ---------------------------------------------------------------------------
+
+EVALUATION_SYSTEM_PROMPT = """
+You are an independent Pinterest headline editor.
+
+You are evaluating headlines against a specific researched blogger style.
+You are NOT being asked to invent a new style or rewrite the candidates.
+
+The target style uses these eight families:
+1. Behavioural warning / inventory.
+2. Hidden-sign interpretation.
+3. Conditional revelation.
+4. Uncomfortable truth.
+5. Harsh truths.
+6. Unexpected reversal.
+7. Relationship consequences / cause and effect.
+8. Direct instruction / discovery.
+
+Approximately 90% of headlines should be numbered when the article supports
+genuinely countable material. Prefer a strong numbered candidate.
+
+For every candidate, evaluate:
+
+1. ARTICLE FIDELITY
+   Does the complete article genuinely support the promise?
+
+2. FORMULA FIT
+   Does it follow one of the researched headline structures?
+
+3. SUBJECT CLARITY
+   Can a Pinterest reader immediately understand the person, behaviour,
+   situation, or problem?
+
+4. SPECIFICITY
+   Does it promise identifiable signs, behaviours, truths, consequences,
+   discoveries, or actions?
+
+5. CURIOSITY
+   Does it create a useful information gap?
+
+6. PINTEREST READABILITY
+   Does it sound like a clear, clickable headline rather than a sentence
+   lifted from an essay?
+
+7. ORIGINALITY
+   Is it different from the post's previous headlines?
+
+Reject:
+- Quote-like article excerpts.
+- Poetic or abstract slogans.
+- Therapy affirmations.
+- Vague emotional declarations.
+- Unsupported dramatic claims.
+- Invented numbered lists.
+- Candidates that merely rearrange words from a previous headline.
+- Candidates that do not fit any of the eight families.
+
+The following is a negative anchor:
+"Narcissistic Abuse Doesn't Just Hurt You; It Steals Your Right To Trust
+Your Own Experience."
+
+It sounds like a dramatic essay sentence, not the researched Pinterest
+headline style. Reject this type of construction.
+
+A positive structural anchor is:
+"Understand The System: Why a Narcissist Can't Tolerate These 7 Aspects
+of You."
+
+It has a recognisable subject, a concrete promise, and a numbered structure.
+The wording can be improved, but the packaging direction is closer to the
+target style.
+
+Do not rewrite candidates. Approve or reject the exact candidate wording.
+
+Return only valid JSON:
+
+{
+  "evaluations": [
+    {
+      "headline": "Exact candidate wording",
+      "approved": true,
+      "score": 9,
+      "reason": "Brief explanation"
+    }
+  ]
+}
+"""
+
+
+# ---------------------------------------------------------------------------
+# SHARED HELPERS
+# ---------------------------------------------------------------------------
+
 def _parse_response(response_text: str) -> dict:
     """Parse JSON returned by either model provider."""
     raw = (response_text or "").strip()
 
-    raw = re.sub(r"^```(?:json)?\s*", "", raw, flags=re.IGNORECASE)
+    raw = re.sub(
+        r"^```(?:json)?\s*",
+        "",
+        raw,
+        flags=re.IGNORECASE,
+    )
     raw = re.sub(r"\s*```$", "", raw)
 
     start = raw.find("{")
@@ -368,13 +578,52 @@ def _parse_response(response_text: str) -> dict:
     return parsed
 
 
+def _normalise_headline(headline: str) -> str:
+    """Normalize punctuation, spacing and case for exact-wording checks."""
+    value = (headline or "").casefold()
+    value = value.translate(str.maketrans("", "", string.punctuation + "“”‘’—–"))
+    return " ".join(value.split())
+
+
 def _similarity(left: str, right: str) -> float:
-    """Return a normalized similarity score between two headlines."""
+    """Return normalized similarity between two headlines."""
     return difflib.SequenceMatcher(
         None,
-        left.casefold().strip(),
-        right.casefold().strip(),
+        _normalise_headline(left),
+        _normalise_headline(right),
     ).ratio()
+
+
+def _is_numbered_headline(headline: str) -> bool:
+    return bool(NUMBER_PATTERN.match((headline or "").strip()))
+
+
+def _is_quote_like_or_slogan(headline: str) -> bool:
+    """
+    Reject a small set of obvious essay-excerpt/slogan constructions.
+
+    This is intentionally conservative. The independent evaluator handles
+    broader editorial judgment.
+    """
+    text = " ".join((headline or "").casefold().split())
+
+    rejected_patterns = (
+        r"\bdoesn't just\b",
+        r"\bdoes not just\b",
+        r"\bwasn't just\b",
+        r"\bwas not just\b",
+        r"\byou were never broken\b",
+        r"\byou are not broken\b",
+        r"\bit was never about\b",
+        r"\bit's not about\b",
+        r"\bit is not about\b",
+        r"\bthe truth is\b",
+    )
+
+    return any(
+        re.search(pattern, text)
+        for pattern in rejected_patterns
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -436,8 +685,7 @@ def _call_model(
     """
     Use Gemini first when configured, then fall back to Groq.
 
-    A Gemini rate limit is not allowed to hold up the workflow with repeated
-    long waits. If Gemini fails, Groq is tried immediately when available.
+    Both providers receive the same editorial instructions.
     """
     errors = []
 
@@ -450,7 +698,10 @@ def _call_model(
             )
         except Exception as exc:
             errors.append(f"Gemini: {exc}")
-            log.warning("Gemini request failed; checking Groq fallback: %s", exc)
+            log.warning(
+                "Gemini request failed; checking Groq fallback: %s",
+                exc,
+            )
 
     if os.getenv("GROQ_API_KEY"):
         try:
@@ -465,9 +716,7 @@ def _call_model(
     if not errors:
         errors.append("Set GEMINI_API_KEY or GROQ_API_KEY.")
 
-    raise RuntimeError(
-        "Model request failed. " + " | ".join(errors)
-    )
+    raise RuntimeError("Model request failed. " + " | ".join(errors))
 
 
 # ---------------------------------------------------------------------------
@@ -475,12 +724,7 @@ def _call_model(
 # ---------------------------------------------------------------------------
 
 def _build_analysis_prompt(title: str, body: str) -> str:
-    """
-    Build the first-stage prompt.
-
-    The complete extracted article is passed without the old 12,000-character
-    truncation.
-    """
+    """Pass the complete article to the analysis model without truncation."""
     return f"""
 ARTICLE TITLE:
 {title}
@@ -502,11 +746,9 @@ def _analyse_article(title: str, body: str) -> dict:
     if not body or not body.strip():
         raise ValueError("Cannot analyse an empty article body.")
 
-    prompt = _build_analysis_prompt(title, body)
-
     analysis = _call_model(
         ANALYSIS_SYSTEM_PROMPT,
-        prompt,
+        _build_analysis_prompt(title, body),
         temperature=0.2,
     )
 
@@ -524,139 +766,7 @@ def _analyse_article(title: str, body: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# CANDIDATE VALIDATION AND SELECTION
-# ---------------------------------------------------------------------------
-
-def _select_valid_result(
-    data: dict,
-    recent_headlines: list[str],
-) -> dict:
-    """
-    Clean candidates and ensure the selected headline is:
-    - Present in the candidate list.
-    - Not already used for this article.
-    - Preferably the highest-scoring unused candidate when correction is needed.
-    """
-    candidates = data.get("candidates") or []
-
-    cleaned = []
-    seen = set()
-
-    for item in candidates:
-        if not isinstance(item, dict):
-            continue
-
-        headline = re.sub(
-            r"\s+",
-            " ",
-            str(item.get("headline", "")),
-        ).strip().strip('"“”')
-
-        family = str(item.get("family", "")).strip()
-
-        if not headline:
-            continue
-
-        key = headline.casefold()
-
-        if key in seen:
-            continue
-
-        seen.add(key)
-
-        try:
-            score = float(item.get("score", 0))
-        except (TypeError, ValueError):
-            score = 0
-
-        cleaned.append({
-            "family": family,
-            "headline": headline,
-            "score": score,
-        })
-
-    if not cleaned:
-        raise ValueError(
-            "Headline model returned no usable candidates."
-        )
-
-    history = [
-        str(headline).strip()
-        for headline in recent_headlines
-        if headline and str(headline).strip()
-    ]
-
-    def is_recent(candidate: str) -> bool:
-        return any(
-            _similarity(candidate, old) >= 0.82
-            for old in history
-        )
-
-    selected = re.sub(
-        r"\s+",
-        " ",
-        str(data.get("selected_headline", "")),
-    ).strip().strip('"“”')
-
-    selected_item = next(
-        (
-            candidate
-            for candidate in cleaned
-            if candidate["headline"].casefold() == selected.casefold()
-        ),
-        None,
-    )
-
-    if selected_item is None or is_recent(selected_item["headline"]):
-        available = [
-            candidate
-            for candidate in cleaned
-            if not is_recent(candidate["headline"])
-        ]
-
-        if not available:
-            raise ValueError(
-                "All generated headline candidates duplicate recent pins "
-                "for this article."
-            )
-
-        selected_item = max(
-            available,
-            key=lambda candidate: candidate["score"],
-        )
-
-    # Keep accent phrases relevant to the actual selected headline.
-    blue_words = data.get("blue_words", [])
-
-    if not isinstance(blue_words, list):
-        blue_words = []
-
-    selected_lower = selected_item["headline"].casefold()
-
-    blue_words = [
-        str(word).strip()
-        for word in blue_words
-        if str(word).strip()
-        and str(word).strip().casefold() in selected_lower
-    ][:4]
-
-    return {
-        "headline": selected_item["headline"],
-        "blue_words": blue_words,
-        "emotion": str(data.get("emotion", "")).strip(),
-        "family": (
-            selected_item["family"]
-            or str(data.get("selected_family", "")).strip()
-        ),
-        "editorial_angle": str(
-            data.get("editorial_angle", "")
-        ).strip(),
-        "candidates": cleaned,
-    }
-
-
-# ---------------------------------------------------------------------------
-# HEADLINE GENERATION
+# PROMPT BUILDERS
 # ---------------------------------------------------------------------------
 
 def _build_headline_prompt(
@@ -665,10 +775,10 @@ def _build_headline_prompt(
     analysis: dict,
     recent_headlines: list[str],
 ) -> str:
-    """Build the second-stage editorial prompt."""
+    """Build the formula-based candidate-generation prompt."""
     history_text = (
-        "\n".join(f"- {headline}" for headline in recent_headlines[-30:])
-        or "(No previous successful headlines recorded.)"
+        "\n".join(f"- {headline}" for headline in recent_headlines)
+        or "(No previous headlines recorded for this article.)"
     )
 
     analysis_text = json.dumps(
@@ -687,38 +797,321 @@ COMPLETE ARTICLE BODY:
 STRUCTURED ARTICLE ANALYSIS:
 {analysis_text}
 
-RECENT SUCCESSFUL HEADLINES ALREADY USED FOR THIS ARTICLE:
+COMPLETE PREVIOUS HEADLINE HISTORY FOR THIS ARTICLE:
 {history_text}
 
-EDITORIAL TASK
+GENERATION TASK
 
-1. Use the complete article and structured analysis together.
-2. Identify the strongest specific reader-facing promise supported by the
-   article.
-3. Decide which reference headline families genuinely fit the article.
-4. Generate 6–8 distinct candidate headlines. Do not force a minimum number
-   of headline families.
-5. Make the candidates meaningfully different in editorial angle, not merely
-   superficial rewrites.
-6. Use the article's strongest concrete behaviours, relationship situations,
-   discoveries, consequences, or uncomfortable arguments.
-7. Use numbers only when the article contains a genuinely countable set.
-8. Avoid literary excerpts, poetic observations, therapy affirmations,
-   vague emotional fragments, abstract metaphors, and unsupported promises.
-9. Do not repeat or closely paraphrase the recent successful headlines.
-10. Score each candidate from 1 to 10, considering fidelity, clarity,
-    specificity, curiosity, and reader relevance together.
-11. Select the strongest overall candidate. The selected headline must be
-    copied exactly from the candidate list.
-12. Select 2–4 meaningful words or short phrases from the selected headline
-    for image accent styling. They must actually appear in that headline.
+1. Understand the article's strongest concrete reader-facing promise.
+2. Choose the most appropriate families from the eight researched families.
+3. Generate TEN distinct candidates.
+4. Aim for NINE numbered candidates and ONE non-numbered candidate,
+   provided the article contains enough genuinely countable material.
+5. Do not invent signs, behaviours, steps, reasons, or consequences to
+   satisfy the numbered target.
+6. Use different article angles, not superficial wording changes.
+7. Use the narcissist adaptation anchors and research examples as
+   structural guidance, not wording to copy.
+8. Do not repeat or closely paraphrase any headline in the history above.
+9. Reject quote-like, abstract, poetic, or slogan-like constructions.
+10. Score candidates from 1 to 10 for fidelity, formula fit, clarity,
+    specificity, curiosity, and Pinterest readability.
+11. Select a strong numbered candidate when one genuinely fits.
+12. Select a non-numbered candidate only when it is the stronger truthful
+    promise or the article does not support a numbered list.
+13. Select 2–4 accent phrases that actually appear in the selected headline.
 
-The complete article is the authority. If the structured analysis appears
-to overstate something that the article does not support, follow the article.
+The complete article is the authority. If the structured analysis overstates
+something the article does not support, follow the article.
 
 Return the JSON structure required by your system instructions.
 """
 
+
+def _build_evaluation_prompt(
+    title: str,
+    body: str,
+    analysis: dict,
+    candidates: list[dict],
+    recent_headlines: list[str],
+) -> str:
+    """Build the independent evaluation prompt."""
+    return f"""
+ARTICLE TITLE:
+{title}
+
+COMPLETE ARTICLE BODY:
+{body}
+
+ARTICLE ANALYSIS:
+{json.dumps(analysis, ensure_ascii=False, indent=2)}
+
+CANDIDATES TO EVALUATE:
+{json.dumps(candidates, ensure_ascii=False, indent=2)}
+
+PREVIOUS HEADLINES FOR THIS ARTICLE:
+{json.dumps(recent_headlines, ensure_ascii=False, indent=2)}
+
+Evaluate every candidate independently against the researched headline
+families and the complete article.
+
+Do not rewrite any candidate. Return an evaluation for every candidate.
+A candidate must be rejected if it is unsupported, vague, quote-like,
+abstract, slogan-like, or a superficial repeat of the article history.
+
+Prefer strong numbered candidates when the article supports them.
+
+Return only the JSON structure required by your system instructions.
+"""
+
+
+# ---------------------------------------------------------------------------
+# CANDIDATE CLEANING AND EDITORIAL SELECTION
+# ---------------------------------------------------------------------------
+
+def _clean_candidates(data: dict) -> list[dict]:
+    """Normalize candidate objects and remove duplicate wording."""
+    candidates = data.get("candidates") or []
+
+    cleaned = []
+    seen = set()
+
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+
+        headline = re.sub(
+            r"\s+",
+            " ",
+            str(item.get("headline", "")),
+        ).strip().strip('"“”')
+
+        if not headline:
+            continue
+
+        key = _normalise_headline(headline)
+
+        if not key or key in seen:
+            continue
+
+        seen.add(key)
+
+        try:
+            score = float(item.get("score", 0))
+        except (TypeError, ValueError):
+            score = 0
+
+        cleaned.append({
+            "family": str(item.get("family", "")).strip(),
+            "headline": headline,
+            "score": score,
+            "angle": str(item.get("angle", "")).strip(),
+        })
+
+    return cleaned
+
+
+def _evaluate_candidates(
+    title: str,
+    body: str,
+    analysis: dict,
+    candidates: list[dict],
+    recent_headlines: list[str],
+) -> list[dict]:
+    """Run the independent editorial evaluation stage."""
+    prompt = _build_evaluation_prompt(
+        title,
+        body,
+        analysis,
+        candidates,
+        recent_headlines,
+    )
+
+    result = _call_model(
+        EVALUATION_SYSTEM_PROMPT,
+        prompt,
+        temperature=0.1,
+    )
+
+    evaluations = result.get("evaluations")
+
+    if not isinstance(evaluations, list):
+        raise ValueError(
+            "Editorial evaluator returned no valid evaluations."
+        )
+
+    return evaluations
+
+
+def _select_valid_result(
+    data: dict,
+    recent_headlines: list[str],
+    approved_headlines: list[str] | None = None,
+) -> dict:
+    """
+    Select an approved, article-faithful and unused headline.
+
+    The evaluator cannot introduce new wording. The selected headline must
+    be one of the original generated candidates.
+    """
+    candidates = _clean_candidates(data)
+
+    if not candidates:
+        raise ValueError(
+            "Headline model returned no usable candidates."
+        )
+
+    history = [
+        str(headline).strip()
+        for headline in recent_headlines
+        if headline and str(headline).strip()
+    ]
+
+    history_keys = {
+        _normalise_headline(headline)
+        for headline in history
+    }
+
+    if approved_headlines is None:
+        # Kept for compatibility with direct callers and unit tests.
+        approved_keys = {
+            _normalise_headline(candidate["headline"])
+            for candidate in candidates
+            if not _is_quote_like_or_slogan(candidate["headline"])
+        }
+    else:
+        approved_keys = {
+            _normalise_headline(headline)
+            for headline in approved_headlines
+        }
+
+    available = []
+
+    for candidate in candidates:
+        headline = candidate["headline"]
+        key = _normalise_headline(headline)
+
+        if key in history_keys:
+            continue
+
+        if key not in approved_keys:
+            continue
+
+        if _is_quote_like_or_slogan(headline):
+            continue
+
+        # Avoid near-identical rewordings while allowing a formula to recur
+        # with a genuinely different angle and wording.
+        if any(
+            _similarity(headline, old) >= 0.94
+            for old in history
+        ):
+            continue
+
+        available.append(candidate)
+
+    if not available:
+        raise ValueError(
+            "No editorially approved, unused headline remains for this "
+            "article. The system will not reuse a previous headline or "
+            "select a rejected candidate."
+        )
+
+    # Numbered headlines are the default whenever an approved one exists.
+    numbered = [
+        candidate for candidate in available
+        if _is_numbered_headline(candidate["headline"])
+    ]
+
+    selection_pool = numbered if numbered else available
+
+    # Prefer the evaluator's score if supplied; otherwise retain generation
+    # score. Candidate wording remains unchanged.
+    selected = max(
+        selection_pool,
+        key=lambda candidate: candidate["score"],
+    )
+
+    blue_words = data.get("blue_words", [])
+
+    if not isinstance(blue_words, list):
+        blue_words = []
+
+    selected_lower = selected["headline"].casefold()
+
+    blue_words = [
+        str(word).strip()
+        for word in blue_words
+        if str(word).strip()
+        and str(word).strip().casefold() in selected_lower
+    ][:4]
+
+    return {
+        "headline": selected["headline"],
+        "blue_words": blue_words,
+        "emotion": str(data.get("emotion", "")).strip(),
+        "family": (
+            selected["family"]
+            or str(data.get("selected_family", "")).strip()
+        ),
+        "editorial_angle": (
+            selected["angle"]
+            or str(data.get("editorial_angle", "")).strip()
+        ),
+        "candidates": candidates,
+    }
+
+
+def _approved_candidate_headlines(
+    candidates: list[dict],
+    evaluations: list[dict],
+) -> list[str]:
+    """Match evaluator approvals to exact generated candidate wording."""
+    candidate_by_key = {
+        _normalise_headline(item["headline"]): item["headline"]
+        for item in candidates
+    }
+
+    approved = []
+
+    for evaluation in evaluations:
+        if not isinstance(evaluation, dict):
+            continue
+
+        headline = str(evaluation.get("headline", "")).strip()
+        key = _normalise_headline(headline)
+
+        if key not in candidate_by_key:
+            continue
+
+        if evaluation.get("approved") is not True:
+            continue
+
+        try:
+            score = float(evaluation.get("score", 0))
+        except (TypeError, ValueError):
+            score = 0
+
+        if score < 7:
+            continue
+
+        if _is_quote_like_or_slogan(headline):
+            continue
+
+        approved.append(candidate_by_key[key])
+
+        # Keep the evaluator's score attached to the original candidate.
+        for candidate in candidates:
+            if _normalise_headline(candidate["headline"]) == key:
+                candidate["score"] = score
+                break
+
+    return approved
+
+
+# ---------------------------------------------------------------------------
+# PUBLIC GENERATION FUNCTION
+# ---------------------------------------------------------------------------
 
 def generate_headline(
     title: str,
@@ -727,10 +1120,9 @@ def generate_headline(
     recent_headlines: list[str] | None = None,
 ) -> dict:
     """
-    Generate a Pinterest headline using article analysis followed by
-    candidate generation and editorial selection.
+    Generate a Pinterest headline through analysis, generation and review.
 
-    The returned keys remain compatible with main.py:
+    Returned keys remain compatible with main.py:
         headline
         blue_words
         emotion
@@ -749,12 +1141,28 @@ def generate_headline(
     if previous_headline and previous_headline not in history:
         history.append(previous_headline)
 
+    # Remove duplicate history entries without losing newest-first ordering.
+    deduplicated_history = []
+    seen_history = set()
+
+    for headline in history:
+        if not headline:
+            continue
+
+        key = _normalise_headline(str(headline))
+
+        if key and key not in seen_history:
+            seen_history.add(key)
+            deduplicated_history.append(str(headline).strip())
+
+    history = deduplicated_history
+
     log.info(
         "  Editorial : analysing complete article (%s characters)",
         len(body),
     )
 
-    # Stage 1: Understand the article.
+    # Stage 1: understand the article.
     analysis = _analyse_article(title, body)
 
     log.info(
@@ -762,25 +1170,60 @@ def generate_headline(
         str(analysis.get("central_subject", ""))[:120],
     )
 
-    # Stage 2: Develop and select article-faithful headlines.
-    prompt = _build_headline_prompt(
+    # Stage 2: generate candidates using the researched formulas.
+    generation_prompt = _build_headline_prompt(
         title=title,
         body=body,
         analysis=analysis,
         recent_headlines=history,
     )
 
-    result = _call_model(
+    generated = _call_model(
         SYSTEM_PROMPT,
-        prompt,
-        temperature=0.75,
+        generation_prompt,
+        temperature=0.8,
     )
 
-    selected = _select_valid_result(result, history)
+    candidates = _clean_candidates(generated)
+
+    if not candidates:
+        raise ValueError("Headline generation returned no usable candidates.")
 
     log.info(
-        "  Selected  : %s",
-        selected["headline"],
+        "  Generated : %s candidates; %s numbered",
+        len(candidates),
+        sum(
+            1 for item in candidates
+            if _is_numbered_headline(item["headline"])
+        ),
     )
+
+    # Stage 3: independent editorial evaluation.
+    evaluations = _evaluate_candidates(
+        title=title,
+        body=body,
+        analysis=analysis,
+        candidates=candidates,
+        recent_headlines=history,
+    )
+
+    approved = _approved_candidate_headlines(
+        candidates,
+        evaluations,
+    )
+
+    log.info(
+        "  Evaluated : %s approved out of %s",
+        len(approved),
+        len(candidates),
+    )
+
+    selected = _select_valid_result(
+        generated,
+        history,
+        approved_headlines=approved,
+    )
+
+    log.info("  Selected  : %s", selected["headline"])
 
     return selected
