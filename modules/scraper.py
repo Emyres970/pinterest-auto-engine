@@ -141,7 +141,7 @@ def _extract_container_text(container, title: str = "") -> str:
     they often carry important article structure. List items are included
     when they contain meaningful text.
     """
-    container = _remove_page_chrome(copy.copy(container))
+    container = _remove_page_chrome(copy.deepcopy(container))
 
     elements = container.find_all(
         ["p", "h2", "h3", "h4", "blockquote", "li"]
