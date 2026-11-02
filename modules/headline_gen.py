@@ -554,7 +554,7 @@ Return only valid JSON:
 # ---------------------------------------------------------------------------
 
 def _parse_response(response_text: str) -> dict:
-    """Parse JSON returned by either model provider."""
+    """Parse JSON returned by the model provider."""
     raw = (response_text or "").strip()
 
     raw = re.sub(
@@ -628,54 +628,60 @@ def _is_quote_like_or_slogan(headline: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# PROVIDER CALLS
+# PROVIDER CALLS — GROQ ONLY
 # ---------------------------------------------------------------------------
+
+GROQ_MODEL = "openai/gpt-oss-120b"
+
 
 def _try_groq(
     prompt: str,
     system_prompt: str = SYSTEM_PROMPT,
     temperature: float = 0.75,
 ) -> dict:
-    """Call Groq and parse its JSON response."""
+    """Call Groq GPT-OSS 120B and parse its JSON response."""
     from groq import Groq
 
-    client = Groq(api_key=os.getenv("GROQ_API_KEY"))
+    api_key = os.getenv("GROQ_API_KEY")
+
+    if not api_key:
+        raise RuntimeError(
+            "GROQ_API_KEY is missing. Add the existing Groq key "
+            "to GitHub Actions secrets."
+        )
+
+    client = Groq(api_key=api_key)
+
+    # GPT-OSS works best when the instructions are included in the user
+    # message rather than sent as a separate system message.
+    combined_prompt = (
+        system_prompt.strip()
+        + "\n\n"
+        + "=" * 72
+        + "\nTASK\n"
+        + "=" * 72
+        + "\n"
+        + prompt.strip()
+    )
 
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model=GROQ_MODEL,
         messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt},
+            {"role": "user", "content": combined_prompt},
         ],
         temperature=temperature,
+        max_completion_tokens=8192,
         response_format={"type": "json_object"},
+        reasoning_effort="medium",
+        include_reasoning=False,
     )
 
-    return _parse_response(response.choices[0].message.content)
+    content = response.choices[0].message.content
 
+    if not content:
+        raise ValueError("Groq returned an empty response.")
 
-def _try_gemini(
-    prompt: str,
-    system_prompt: str = SYSTEM_PROMPT,
-    temperature: float = 0.75,
-) -> dict:
-    """Call Gemini and parse its JSON response."""
-    from google import genai
-    from google.genai import types
-
-    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-    response = client.models.generate_content(
-        model="gemini-2.5-flash",
-        config=types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            temperature=temperature,
-            response_mime_type="application/json",
-        ),
-        contents=prompt,
-    )
-
-    return _parse_response(response.text)
+    return _parse_response(content)
 
 
 def _call_model(
@@ -684,40 +690,31 @@ def _call_model(
     temperature: float = 0.75,
 ) -> dict:
     """
-    Use Gemini first when configured, then fall back to Groq.
+    Use Groq GPT-OSS 120B as the only model provider.
 
-    Both providers receive the same editorial instructions.
+    Gemini is deliberately not called. All three editorial stages use
+    the same Groq model and the existing GROQ_API_KEY secret.
     """
-    errors = []
+    if not os.getenv("GROQ_API_KEY"):
+        raise RuntimeError(
+            "GROQ_API_KEY is not configured. "
+            "Add the existing Groq key to GitHub Actions secrets."
+        )
 
-    if os.getenv("GEMINI_API_KEY"):
-        try:
-            return _try_gemini(
-                prompt,
-                system_prompt=system_prompt,
-                temperature=temperature,
-            )
-        except Exception as exc:
-            errors.append(f"Gemini: {exc}")
-            log.warning(
-                "Gemini request failed; checking Groq fallback: %s",
-                exc,
-            )
+    log.info("  AI provider: Groq / %s", GROQ_MODEL)
 
-    if os.getenv("GROQ_API_KEY"):
-        try:
-            return _try_groq(
-                prompt,
-                system_prompt=system_prompt,
-                temperature=temperature,
-            )
-        except Exception as exc:
-            errors.append(f"Groq: {exc}")
+    try:
+        return _try_groq(
+            prompt,
+            system_prompt=system_prompt,
+            temperature=temperature,
+        )
+    except Exception as exc:
+        log.exception("Groq model request failed.")
 
-    if not errors:
-        errors.append("Set GEMINI_API_KEY or GROQ_API_KEY.")
-
-    raise RuntimeError("Model request failed. " + " | ".join(errors))
+        raise RuntimeError(
+            f"Groq model request failed ({GROQ_MODEL}): {exc}"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
