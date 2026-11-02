@@ -1,3 +1,4 @@
+
 """
 Pinterest headline generation using a three-stage editorial system.
 
@@ -1211,7 +1212,9 @@ def generate_headline(
         candidates,
         evaluations,
     )
-        generated["candidates"] = candidates
+
+    # Preserve the evaluator's scores for final candidate selection.
+    generated["candidates"] = candidates
 
     log.info(
         "  Evaluated : %s approved out of %s",
