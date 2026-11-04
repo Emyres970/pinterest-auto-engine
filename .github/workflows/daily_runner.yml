@@ -1,9 +1,10 @@
+
 name: Pinterest Automation
 
 on:
   schedule:
-    - cron: '0 8 * * *'   # Runs once daily at 8 AM UTC
-  workflow_dispatch:        # Manual trigger from GitHub UI
+    - cron: '0 8 * * *'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -39,7 +40,7 @@ jobs:
           PINTEREST_COOKIES_B64: ${{ secrets.PINTEREST_COOKIES_B64 }}
 
       - name: Clear Pinterest drafts
-        continue-on-error: true  # best-effort maintenance — must never block the posting step below
+        continue-on-error: true
         env:
           PINTEREST_EMAIL: ${{ secrets.PINTEREST_EMAIL }}
           PINTEREST_PASSWORD: ${{ secrets.PINTEREST_PASSWORD }}
@@ -49,6 +50,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
           PINTEREST_EMAIL: ${{ secrets.PINTEREST_EMAIL }}
           PINTEREST_PASSWORD: ${{ secrets.PINTEREST_PASSWORD }}
           PINTEREST_BOARD_NAME: ${{ secrets.PINTEREST_BOARD_NAME }}
