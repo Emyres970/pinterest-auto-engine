@@ -3,8 +3,12 @@
 Pinterest headline generation: research-led, three-stage editorial system.
 
 Stage 1: Read and understand the complete article.
-Stage 2: Generate distinct Pinterest headline angles from the evidence packet.
-Stage 3: Independently score and approve the exact candidate wording.
+Stage 2: Generate distinct Pinterest headline angles.
+Stage 3: Independently evaluate and approve the exact wording.
+
+Provider order:
+1. Groq / GPT-OSS 120B
+2. Cerebras / GPT-OSS 120B
 
 The public generate_headline() interface and return keys remain compatible
 with main.py.
@@ -21,6 +25,7 @@ import time
 log = logging.getLogger(__name__)
 
 GROQ_MODEL = "openai/gpt-oss-120b"
+CEREBRAS_MODEL = "gpt-oss-120b"
 
 NUMBER_WORDS = (
     "one", "two", "three", "four", "five", "six",
@@ -32,7 +37,6 @@ NUMBER_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# These are research anchors, not templates to copy mechanically.
 RESEARCH_ANCHORS = [
     "Men Are Always Afraid To Lose This Kind Of Woman",
     "7 Things Parents Should Never Do In Front Of Their Children",
@@ -68,24 +72,12 @@ FAMILIES = """
    Family ID: when_conditional_revelation
 
    Core structure:
-   "When [a particular situation, condition or event occurs], [something
-   meaningful becomes visible, happens, changes or is revealed]."
+   "When [a particular situation, condition or event occurs],
+   [something meaningful becomes visible, happens, changes or is revealed]."
 
-   The second half can reveal:
-   - Behaviours someone begins displaying.
-   - Signs that expose an underlying truth.
-   - Words, reactions or choices that reveal feelings or intentions.
-   - Changes in a relationship, family or social dynamic.
-   - Consequences, patterns, risks or unexpected outcomes.
-   - What the reader should notice, understand or expect.
-
-   Examples of possible forms:
-   "When [Person] [Condition], They Say These [Number] Things."
-   "When [Person] [Condition], These [Number] Signs Begin To Appear."
-   "When [Situation] Happens, [Meaningful Outcome]."
-
-   These are examples, not mandatory templates. This family is NOT limited
-   to behaviour or numbered lists.
+   The second half can reveal behaviours, signs, words, reactions, choices,
+   relationship changes, consequences, risks, patterns or unexpected outcomes.
+   It is not restricted to behaviours or numbered lists.
 
    Editorial test: Given this condition or event, what meaningful thing
    becomes visible, happens, changes or should be understood?
@@ -97,21 +89,9 @@ FAMILIES = """
    "If [a particular condition is true, a person does something, or a
    situation exists], [a meaningful insight, outcome or revelation follows]."
 
-   The second half can reveal:
-   - What a situation or experience means.
-   - What someone's behaviour, choices or reactions reveal.
-   - What a person may experience or what may happen next.
-   - A sign, pattern, consequence, truth or unexpected interpretation.
-   - What the reader should understand, expect, reconsider or do.
-   - A useful discovery, whether or not it is presented as a list.
-
-   Examples of possible forms:
-   "If You Notice These [Number] Things, [Supported Interpretation]."
-   "If [Person] [Condition], [Meaningful Outcome]."
-   "If [Situation Applies To You], Here's What It May Mean."
-
-   These are examples, not mandatory templates. This family is NOT limited
-   to checklists, signs or reader self-recognition.
+   The second half can reveal interpretations, experiences, outcomes,
+   implications, signs, patterns, consequences, advice or discoveries.
+   It is not restricted to checklists or reader self-recognition.
 
    Editorial test: If this condition applies, what meaningful insight,
    outcome, implication or discovery follows from the article?
@@ -133,7 +113,6 @@ FAMILIES = """
 8. RELATIONSHIP CONSEQUENCES / CAUSE AND EFFECT
    "[Number] [Behaviours/Patterns] That Lead To [Specific Consequence]."
    "[Number] Things [Person] Does That Slowly [Specific Consequence]."
-   Use when the article explains what a behaviour produces, damages or changes.
 
 9. DIRECT INSTRUCTION / DISCOVERY
    "If [Specific Problem], Do [Specific Action]."
@@ -141,13 +120,9 @@ FAMILIES = """
    "[Specific Situation] — Here's Why It Happens / What It Means."
    Promise an action only when the article actually gives useful advice.
 
-WHEN AND IF ARE BROAD EDITORIAL FRAMES, NOT TOPIC CATEGORIES. Either can
-package behaviours, signs, relationship dynamics, family situations, teen
-issues, emotional patterns, consequences, advice or other article-supported
-material. Choose the family based on logical structure, not subject matter:
-WHEN frames what becomes visible or happens under a condition or event;
-IF frames what follows, is implied or can be discovered when a condition
-applies.
+WHEN and IF are broad editorial frames, not topic categories.
+WHEN frames what becomes visible or happens under a condition or event.
+IF frames what follows, is implied or can be discovered when a condition applies.
 """
 
 EDITORIAL_DNA = """
@@ -247,21 +222,20 @@ Aim for approximately 90% numbered candidates when the article supports
 genuinely countable material. For ten candidates, aim for nine numbered
 candidates when the evidence supports that many. This is a target for the
 candidate mix, not permission to invent lists or inflate counts.
-If the article does not support a number, do not force one.
 
 CANDIDATE DIVERSITY:
 Generate ten distinct candidates. Give WHEN and IF deliberate attention:
 - Aim to include two WHEN candidates when distinct conditional-revelation
-  angles are supported; use one if only one strong angle fits.
+  angles are supported.
 - Aim to include two IF candidates when distinct conditional-discovery
-  angles are supported; use one if only one strong angle fits.
+  angles are supported.
 - WHEN may reveal behaviours, signs, words, reactions, relationship changes,
   consequences, risks or any other meaningful supported outcome.
 - IF may reveal interpretations, outcomes, implications, experiences, signs,
   consequences, advice or other supported discoveries.
 - Neither family is restricted to lists, behaviours or signs.
 - Do not force either family if the article offers no truthful, compelling
-  angle. Use remaining slots for other researched families.
+  angle.
 
 Use remaining slots for distinct actions, statements, hidden signs,
 consequences, uncomfortable truths, reversals and useful discoveries.
@@ -282,15 +256,13 @@ REJECT THESE STYLES:
 
 SUBJECT CLARITY:
 Name the person, relationship, behaviour or situation clearly. "Narcissist"
-is useful only when the article supports that subject. Do not add it merely
-because the account's niche often discusses narcissism.
+is useful only when the article supports that subject.
 
 OUTPUT:
 Return exactly ten candidates if possible. Each candidate must include:
-family, headline, angle, curiosity_mechanism, and generation_score. Use the
-exact family IDs "when_conditional_revelation" and
-"if_conditional_discovery" for those two families.
-generation_score is an initial estimate, not the final editorial decision.
+family, headline, angle, curiosity_mechanism, and generation_score.
+Use the exact family IDs "when_conditional_revelation" and
+"if_conditional_discovery".
 
 Return only valid JSON:
 {{
@@ -318,63 +290,39 @@ the generator. Do not rewrite candidate wording.
 RESEARCHED FAMILIES:
 {FAMILIES}
 
-Evaluate each candidate against the article evidence packet and the exact
-headline research anchors. The examples are evidence of the target style;
-do not demand that every candidate copy their wording.
-
 WHEN TEST:
 A WHEN headline must connect a real situation, condition or event to a
 meaningful thing that becomes visible, happens, changes or is revealed.
 That revelation may be behaviour, signs, words, reactions, relationship
-dynamics, consequences, risks or another supported outcome. Do not judge
-it as weak merely because it is not a behaviour list.
+dynamics, consequences, risks or another supported outcome.
 
 IF TEST:
 An IF headline must connect a real condition to a meaningful insight,
 outcome, implication or discovery. That may be an interpretation, experience,
 sign, pattern, consequence, advice or other article-supported revelation.
-Do not judge it as weak merely because it is not a checklist or reader
-self-recognition headline.
 
 For both families, assess the logic of the condition-to-revelation link,
-the specificity of the promise and whether the article supports it. The
-opening word alone does not make a candidate a good example of the family.
+the specificity of the promise and whether the article supports it.
+The opening word alone does not make a candidate a good example.
 
 SCORE EACH DIMENSION FROM 1 TO 10:
-1. article_fidelity: Is the promise genuinely supported?
-2. formula_fit: Does it use one of the researched headline families?
-3. subject_clarity: Is the person, behaviour or situation immediately clear?
-4. specificity: Does it promise identifiable signs, actions, truths,
-   consequences, discoveries or advice?
-5. curiosity: Does it create a compelling information gap?
-6. pinterest_readability: Is it direct, natural and easy to understand?
-7. distinctiveness: Is the angle meaningfully different from the other
-   candidates and previous headlines?
+1. article_fidelity
+2. formula_fit
+3. subject_clarity
+4. specificity
+5. curiosity
+6. pinterest_readability
+7. distinctiveness
 
-Be demanding. A fluent sentence is not automatically a good Pinterest
-headline. Reject vague, generic, essay-like, poetic, slogan-like, awkward,
+Reject vague, generic, essay-like, poetic, slogan-like, awkward,
 unsupported or misleading headlines.
-
-Reject candidates that:
-- Hide the subject behind abstract language.
-- Use an unsupported number or promise.
-- Make a general claim from one isolated example.
-- Promise a solution the article does not provide.
-- Merely repeat the article title.
-- Closely imitate a previous headline.
-- Sound like a quote from a reflective essay.
-- Use a formula mechanically when it does not fit the article.
-
-A numbered headline is preferred when the article supports a real list.
-However, do not approve a weak numbered headline merely because it is
-numbered. A strong non-numbered headline may be better.
 
 A candidate should normally be approved only when:
 - article_fidelity is at least 8;
 - subject_clarity is at least 7;
 - specificity is at least 7;
 - pinterest_readability is at least 7;
-- the overall score is at least 8.
+- overall score is at least 8.
 
 Do not approve all candidates to be agreeable. Be selective.
 
@@ -412,6 +360,7 @@ def _parse_response(response_text: str) -> dict:
     start, end = raw.find("{"), raw.rfind("}")
     if start >= 0 and end > start:
         raw = raw[start:end + 1]
+
     parsed = json.loads(raw)
     if not isinstance(parsed, dict):
         raise ValueError("Model response must be a JSON object.")
@@ -454,10 +403,6 @@ def _is_quote_like_or_slogan(headline: str) -> bool:
 
 
 def _compact_analysis(analysis: dict) -> dict:
-    """
-    Keep the evidence packet useful but compact. The full article is sent
-    only to Stage 1; these limits prevent later stages repeating it.
-    """
     limits = {
         "central_subject": 350,
         "central_argument": 650,
@@ -466,12 +411,11 @@ def _compact_analysis(analysis: dict) -> dict:
         "main_tension": 450,
         "article_type": 120,
     }
+
     packet = {}
     for key, limit in limits.items():
-        value = analysis.get(key, "")
-        packet[key] = str(value or "")[:limit]
+        packet[key] = str(analysis.get(key, "") or "")[:limit]
 
-    # Preserve useful evidence while shrinking the repeated downstream packet.
     list_limits = {
         "key_points": (8, 190),
         "observable_behaviours": (8, 180),
@@ -483,10 +427,12 @@ def _compact_analysis(analysis: dict) -> dict:
         "usable_numbered_material": (6, 180),
         "evidence_excerpts": (5, 190),
     }
+
     for key, (count, length) in list_limits.items():
         values = analysis.get(key, [])
         if not isinstance(values, list):
             values = []
+
         packet[key] = [
             str(value).strip()[:length]
             for value in values[:count]
@@ -496,6 +442,7 @@ def _compact_analysis(analysis: dict) -> dict:
     packet["numbered_headline_supported"] = bool(
         analysis.get("numbered_headline_supported", False)
     )
+
     try:
         packet["maximum_honest_count"] = max(
             0, min(20, int(analysis.get("maximum_honest_count", 0)))
@@ -507,22 +454,11 @@ def _compact_analysis(analysis: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# GROQ PROVIDER
+# PROVIDER HELPERS
 # ---------------------------------------------------------------------------
 
-def _try_groq(
-    prompt: str,
-    system_prompt: str,
-    temperature: float = 0.7,
-) -> dict:
-    from groq import Groq
-
-    api_key = os.getenv("GROQ_API_KEY")
-    if not api_key:
-        raise RuntimeError("GROQ_API_KEY is not configured.")
-
-    client = Groq(api_key=api_key, max_retries=0)
-    combined_prompt = (
+def _combined_prompt(system_prompt: str, prompt: str) -> str:
+    return (
         system_prompt.strip()
         + "\n\n"
         + "=" * 60
@@ -532,30 +468,73 @@ def _try_groq(
         + prompt.strip()
     )
 
+
+def _log_usage(provider: str, response) -> None:
+    usage = getattr(response, "usage", None)
+    if not usage:
+        return
+
+    log.info(
+        "  %s usage: prompt=%s completion=%s total=%s tokens",
+        provider,
+        getattr(usage, "prompt_tokens", "?"),
+        getattr(usage, "completion_tokens", "?"),
+        getattr(usage, "total_tokens", "?"),
+    )
+
+
+def _try_groq(
+    prompt: str,
+    system_prompt: str,
+    temperature: float = 0.7,
+    max_completion_tokens: int = 4096,
+) -> dict:
+    from groq import Groq
+
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        raise RuntimeError("GROQ_API_KEY is not configured.")
+
+    client = Groq(api_key=api_key, max_retries=0)
+
     request_args = {
         "model": GROQ_MODEL,
-        "messages": [{"role": "user", "content": combined_prompt}],
+        "messages": [{
+            "role": "user",
+            "content": _combined_prompt(system_prompt, prompt),
+        }],
         "temperature": temperature,
-        "max_completion_tokens": 8192,
+        "max_completion_tokens": max_completion_tokens,
         "response_format": {"type": "json_object"},
         "reasoning_effort": "medium",
         "include_reasoning": False,
     }
 
-    # Retry once for a temporary 429, but never waste retries on exhausted TPD.
     try:
         response = client.chat.completions.create(**request_args)
+
     except Exception as exc:
         status_code = getattr(exc, "status_code", None)
         error_text = str(getattr(exc, "body", "") or exc).casefold()
+
         is_daily_limit = any(
             marker in error_text
-            for marker in ("tokens per day", "per-day", "daily token", "tpd")
+            for marker in (
+                "tokens per day",
+                "per-day",
+                "daily token",
+                "tpd",
+            )
         )
+
+        # Do not waste time retrying an exhausted daily quota.
         if status_code != 429 or is_daily_limit:
             raise
 
-        headers = getattr(getattr(exc, "response", None), "headers", {}) or {}
+        headers = getattr(
+            getattr(exc, "response", None), "headers", {}
+        ) or {}
+
         try:
             wait_seconds = min(
                 30.0, max(1.0, float(headers.get("retry-after", 5)))
@@ -567,21 +546,55 @@ def _try_groq(
             "  Groq temporary rate limit; waiting %.1fs before one retry",
             wait_seconds,
         )
+
         time.sleep(wait_seconds)
         response = client.chat.completions.create(**request_args)
 
-    usage = getattr(response, "usage", None)
-    if usage:
-        log.info(
-            "  Groq usage: prompt=%s completion=%s total=%s tokens",
-            getattr(usage, "prompt_tokens", "?"),
-            getattr(usage, "completion_tokens", "?"),
-            getattr(usage, "total_tokens", "?"),
-        )
+    _log_usage("Groq", response)
 
     content = response.choices[0].message.content
     if not content:
         raise ValueError("Groq returned an empty response.")
+
+    return _parse_response(content)
+
+
+def _try_cerebras(
+    prompt: str,
+    system_prompt: str,
+    temperature: float = 0.7,
+    max_completion_tokens: int = 4096,
+) -> dict:
+    from cerebras.cloud.sdk import Cerebras
+
+    api_key = os.getenv("CEREBRAS_API_KEY")
+    if not api_key:
+        raise RuntimeError("CEREBRAS_API_KEY is not configured.")
+
+    client = Cerebras(
+        api_key=api_key,
+        max_retries=0,
+    )
+
+    request_args = {
+        "model": CEREBRAS_MODEL,
+        "messages": [{
+            "role": "user",
+            "content": _combined_prompt(system_prompt, prompt),
+        }],
+        "temperature": temperature,
+        "max_completion_tokens": max_completion_tokens,
+        "response_format": {"type": "json_object"},
+    }
+
+    response = client.chat.completions.create(**request_args)
+
+    _log_usage("Cerebras", response)
+
+    content = response.choices[0].message.content
+    if not content:
+        raise ValueError("Cerebras returned an empty response.")
+
     return _parse_response(content)
 
 
@@ -589,18 +602,77 @@ def _call_model(
     system_prompt: str,
     prompt: str,
     temperature: float = 0.7,
+    max_completion_tokens: int = 4096,
 ) -> dict:
-    if not os.getenv("GROQ_API_KEY"):
-        raise RuntimeError("GROQ_API_KEY is not configured.")
+    """
+    Try Groq first. If it is unavailable, exhausted or returns an unusable
+    response, send the same request to Cerebras using GPT-OSS 120B.
 
-    log.info("  AI provider: Groq / %s", GROQ_MODEL)
-    try:
-        return _try_groq(prompt, system_prompt, temperature)
-    except Exception as exc:
-        log.exception("Groq model request failed.")
-        raise RuntimeError(
-            f"Groq model request failed ({GROQ_MODEL}): {exc}"
-        ) from exc
+    If Groq is not configured, Cerebras becomes the primary available provider.
+    """
+
+    groq_key = os.getenv("GROQ_API_KEY")
+    cerebras_key = os.getenv("CEREBRAS_API_KEY")
+
+    if groq_key:
+        log.info("  AI provider: Groq / %s", GROQ_MODEL)
+
+        try:
+            return _try_groq(
+                prompt,
+                system_prompt,
+                temperature,
+                max_completion_tokens,
+            )
+
+        except Exception as groq_error:
+            log.warning(
+                "  Groq request failed; switching to Cerebras fallback: %s",
+                groq_error,
+            )
+
+            if not cerebras_key:
+                raise RuntimeError(
+                    f"Groq failed and CEREBRAS_API_KEY is not configured: "
+                    f"{groq_error}"
+                ) from groq_error
+
+            log.info(
+                "  AI fallback: Cerebras / %s",
+                CEREBRAS_MODEL,
+            )
+
+            try:
+                return _try_cerebras(
+                    prompt,
+                    system_prompt,
+                    temperature,
+                    max_completion_tokens,
+                )
+            except Exception as cerebras_error:
+                log.exception("Cerebras fallback request failed.")
+                raise RuntimeError(
+                    "Both AI providers failed. "
+                    f"Groq: {groq_error}. "
+                    f"Cerebras: {cerebras_error}"
+                ) from cerebras_error
+
+    if cerebras_key:
+        log.info(
+            "  AI provider: Cerebras / %s (Groq key not configured)",
+            CEREBRAS_MODEL,
+        )
+        return _try_cerebras(
+            prompt,
+            system_prompt,
+            temperature,
+            max_completion_tokens,
+        )
+
+    raise RuntimeError(
+        "No AI provider is configured. Add GROQ_API_KEY or "
+        "CEREBRAS_API_KEY to GitHub Actions secrets."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -632,11 +704,18 @@ def _analyse_article(title: str, body: str) -> dict:
         ANALYSIS_SYSTEM_PROMPT,
         _build_analysis_prompt(title, body),
         temperature=0.2,
+        max_completion_tokens=3072,
     )
+
     if not result.get("central_subject"):
-        raise ValueError("Article analysis did not identify a central subject.")
+        raise ValueError(
+            "Article analysis did not identify a central subject."
+        )
+
     if not result.get("central_argument"):
-        raise ValueError("Article analysis did not identify its central argument.")
+        raise ValueError(
+            "Article analysis did not identify its central argument."
+        )
 
     return _compact_analysis(result)
 
@@ -651,8 +730,7 @@ def _build_headline_prompt(
     analysis: dict,
     recent_headlines: list[str],
 ) -> str:
-    # body remains in the function signature for compatibility, but is
-    # deliberately not sent again. Stage 1 already read the full article.
+    # The full article was already read in Stage 1.
     del body
 
     return f"""
@@ -691,8 +769,6 @@ def _build_evaluation_prompt(
     candidates: list[dict],
     recent_headlines: list[str],
 ) -> str:
-    # body is deliberately not sent again; the evaluator receives the
-    # compact evidence packet produced after the complete article was read.
     del body
 
     return f"""
@@ -736,12 +812,14 @@ def _clean_candidates(data: dict) -> list[dict]:
         headline = re.sub(
             r"\s+", " ", str(item.get("headline", ""))
         ).strip().strip('"“”')
+
         if not headline:
             continue
 
         key = _normalise_headline(headline)
         if not key or key in seen:
             continue
+
         seen.add(key)
 
         try:
@@ -774,12 +852,21 @@ def _evaluate_candidates(
     prompt = _build_evaluation_prompt(
         title, body, analysis, candidates, recent_headlines
     )
+
     result = _call_model(
-        EVALUATION_SYSTEM_PROMPT, prompt, temperature=0.1
+        EVALUATION_SYSTEM_PROMPT,
+        prompt,
+        temperature=0.1,
+        max_completion_tokens=4096,
     )
+
     evaluations = result.get("evaluations")
+
     if not isinstance(evaluations, list):
-        raise ValueError("Editorial evaluator returned no valid evaluations.")
+        raise ValueError(
+            "Editorial evaluator returned no valid evaluations."
+        )
+
     return evaluations
 
 
@@ -791,6 +878,7 @@ def _approved_candidate_headlines(
         _normalise_headline(item["headline"]): item
         for item in candidates
     }
+
     approved = []
 
     for evaluation in evaluations:
@@ -800,7 +888,9 @@ def _approved_candidate_headlines(
         key = _normalise_headline(
             str(evaluation.get("headline", "")).strip()
         )
+
         candidate = candidate_by_key.get(key)
+
         if not candidate or evaluation.get("approved") is not True:
             continue
 
@@ -813,6 +903,7 @@ def _approved_candidate_headlines(
             score = 0.0
 
         dimensions = evaluation.get("dimensions") or {}
+
         if not isinstance(dimensions, dict):
             dimensions = {}
 
@@ -826,7 +917,6 @@ def _approved_candidate_headlines(
         except (TypeError, ValueError):
             fidelity = clarity = specificity = readability = 0
 
-        # Do not accept a high average score that hides a serious weakness.
         if (
             score < 8
             or fidelity < 8
@@ -841,6 +931,7 @@ def _approved_candidate_headlines(
             evaluation.get("reason", "")
         ).strip()
         candidate["dimensions"] = dimensions
+
         approved.append(candidate["headline"])
 
     return approved
@@ -852,6 +943,7 @@ def _select_valid_result(
     approved_headlines: list[str] | None = None,
 ) -> dict:
     candidates = _clean_candidates(data)
+
     if not candidates:
         raise ValueError("Headline model returned no usable candidates.")
 
@@ -860,7 +952,10 @@ def _select_valid_result(
         for item in recent_headlines
         if item and str(item).strip()
     ]
-    history_keys = {_normalise_headline(item) for item in history}
+
+    history_keys = {
+        _normalise_headline(item) for item in history
+    }
 
     if approved_headlines is None:
         approved_keys = {
@@ -870,19 +965,26 @@ def _select_valid_result(
         }
     else:
         approved_keys = {
-            _normalise_headline(item) for item in approved_headlines
+            _normalise_headline(item)
+            for item in approved_headlines
         }
 
     available = []
+
     for candidate in candidates:
         headline = candidate["headline"]
         key = _normalise_headline(headline)
 
         if key in history_keys or key not in approved_keys:
             continue
+
         if _is_quote_like_or_slogan(headline):
             continue
-        if any(_similarity(headline, old) >= 0.90 for old in history):
+
+        if any(
+            _similarity(headline, old) >= 0.90
+            for old in history
+        ):
             continue
 
         available.append(candidate)
@@ -894,22 +996,25 @@ def _select_valid_result(
             "previous headline."
         )
 
-    # Numbering is a preference, not an override. A numbered candidate gets
-    # a small tie-break advantage; a clearly stronger non-numbered headline
-    # can still win.
     selected = max(
         available,
         key=lambda item: (
             item["score"]
-            + (0.35 if _is_numbered_headline(item["headline"]) else 0)
+            + (
+                0.35
+                if _is_numbered_headline(item["headline"])
+                else 0
+            )
         ),
     )
 
     blue_words = data.get("blue_words", [])
+
     if not isinstance(blue_words, list):
         blue_words = []
 
     headline_lower = selected["headline"].casefold()
+
     blue_words = [
         str(word).strip()
         for word in blue_words
@@ -943,22 +1048,28 @@ def generate_headline(
 ) -> dict:
     if not title or not title.strip():
         raise ValueError("Article title is required.")
+
     if not body or not body.strip():
         raise ValueError("Article body is required.")
 
     history = list(recent_headlines or [])
+
     if previous_headline and previous_headline not in history:
         history.append(previous_headline)
 
     deduplicated = []
     seen = set()
+
     for item in history:
         if not item:
             continue
+
         key = _normalise_headline(str(item))
+
         if key and key not in seen:
             seen.add(key)
             deduplicated.append(str(item).strip())
+
     history = deduplicated
 
     log.info(
@@ -973,26 +1084,33 @@ def generate_headline(
         "  Article   : %s",
         str(analysis.get("central_subject", ""))[:120],
     )
+
     log.info(
         "  Numbering : supported=%s; maximum honest count=%s",
         analysis.get("numbered_headline_supported"),
         analysis.get("maximum_honest_count"),
     )
 
-    # Stage 2: generate ten distinct angles from the compact evidence packet.
+    # Stage 2: generate ten distinct angles from the evidence packet.
     generated = _call_model(
         GENERATION_SYSTEM_PROMPT,
         _build_headline_prompt(title, body, analysis, history),
         temperature=0.8,
+        max_completion_tokens=4096,
     )
+
     candidates = _clean_candidates(generated)
+
     if not candidates:
-        raise ValueError("Headline generation returned no usable candidates.")
+        raise ValueError(
+            "Headline generation returned no usable candidates."
+        )
 
     numbered_count = sum(
         1 for item in candidates
         if _is_numbered_headline(item["headline"])
     )
+
     log.info(
         "  Generated : %s candidates; %s numbered",
         len(candidates),
@@ -1001,11 +1119,20 @@ def generate_headline(
 
     # Stage 3: independently score the exact candidate wording.
     evaluations = _evaluate_candidates(
-        title, body, analysis, candidates, history
+        title,
+        body,
+        analysis,
+        candidates,
+        history,
     )
-    approved = _approved_candidate_headlines(candidates, evaluations)
+
+    approved = _approved_candidate_headlines(
+        candidates,
+        evaluations,
+    )
 
     generated["candidates"] = candidates
+
     log.info(
         "  Evaluated : %s approved out of %s",
         len(approved),
@@ -1013,8 +1140,11 @@ def generate_headline(
     )
 
     selected = _select_valid_result(
-        generated, history, approved_headlines=approved
+        generated,
+        history,
+        approved_headlines=approved,
     )
 
     log.info("  Selected  : %s", selected["headline"])
+
     return selected
