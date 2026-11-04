@@ -1,3 +1,4 @@
+
 """
 Pinterest headline generation: research-led, three-stage editorial system.
 
@@ -15,6 +16,7 @@ import logging
 import os
 import re
 import string
+import time
 
 log = logging.getLogger(__name__)
 
@@ -59,40 +61,93 @@ FAMILIES = """
 
 2. HIDDEN-SIGN INTERPRETATION
    "[Number] Signs [Person/Relationship] [Hidden Reality]"
-   "When [Person] [Condition], Watch For These [Number] Signs."
-   Use when the article helps readers recognise evidence of an underlying
-   relationship reality. Do not diagnose from one isolated behaviour.
+   Use when the article supports recognition of an underlying reality.
+   Do not diagnose from one isolated behaviour.
 
-3. CONDITIONAL REVELATION
-   "When [Person] [Condition], They [Observable Behaviour] These [Number] Ways."
+3. WHEN — CONDITIONAL REVELATION
+   Family ID: when_conditional_revelation
+
+   Core structure:
+   "When [a particular situation, condition or event occurs], [something
+   meaningful becomes visible, happens, changes or is revealed]."
+
+   The second half can reveal:
+   - Behaviours someone begins displaying.
+   - Signs that expose an underlying truth.
+   - Words, reactions or choices that reveal feelings or intentions.
+   - Changes in a relationship, family or social dynamic.
+   - Consequences, patterns, risks or unexpected outcomes.
+   - What the reader should notice, understand or expect.
+
+   Examples of possible forms:
    "When [Person] [Condition], They Say These [Number] Things."
-   Use when a specific condition is linked to observable behaviour.
+   "When [Person] [Condition], These [Number] Signs Begin To Appear."
+   "When [Situation] Happens, [Meaningful Outcome]."
 
-4. UNCOMFORTABLE TRUTH
+   These are examples, not mandatory templates. This family is NOT limited
+   to behaviour or numbered lists.
+
+   Editorial test: Given this condition or event, what meaningful thing
+   becomes visible, happens, changes or should be understood?
+
+4. IF — CONDITIONAL DISCOVERY
+   Family ID: if_conditional_discovery
+
+   Core structure:
+   "If [a particular condition is true, a person does something, or a
+   situation exists], [a meaningful insight, outcome or revelation follows]."
+
+   The second half can reveal:
+   - What a situation or experience means.
+   - What someone's behaviour, choices or reactions reveal.
+   - What a person may experience or what may happen next.
+   - A sign, pattern, consequence, truth or unexpected interpretation.
+   - What the reader should understand, expect, reconsider or do.
+   - A useful discovery, whether or not it is presented as a list.
+
+   Examples of possible forms:
+   "If You Notice These [Number] Things, [Supported Interpretation]."
+   "If [Person] [Condition], [Meaningful Outcome]."
+   "If [Situation Applies To You], Here's What It May Mean."
+
+   These are examples, not mandatory templates. This family is NOT limited
+   to checklists, signs or reader self-recognition.
+
+   Editorial test: If this condition applies, what meaningful insight,
+   outcome, implication or discovery follows from the article?
+
+5. UNCOMFORTABLE TRUTH
    "The Dark Side Of [Familiar Subject] No One Talks About."
    "The Hidden Cost Of [Familiar Situation]."
    "What [Accepted Idea] Leaves Out About [Subject]."
    Use for a genuine overlooked cost, contradiction or uncomfortable reality.
 
-5. HARSH TRUTHS
+6. HARSH TRUTHS
    "[Number] Harsh/Uncomfortable Truths About [Specific Subject]."
    Use only when the article contains several distinct, challenging insights.
 
-6. UNEXPECTED REVERSAL
-   "If You Notice These [Number] Things, It Means [Supported Interpretation]."
+7. UNEXPECTED REVERSAL
    "[Number] Ways [Person] [Behaviour] Without Realising [Consequence]."
    Use when the article changes how a familiar experience should be understood.
 
-7. RELATIONSHIP CONSEQUENCES / CAUSE AND EFFECT
+8. RELATIONSHIP CONSEQUENCES / CAUSE AND EFFECT
    "[Number] [Behaviours/Patterns] That Lead To [Specific Consequence]."
    "[Number] Things [Person] Does That Slowly [Specific Consequence]."
    Use when the article explains what a behaviour produces, damages or changes.
 
-8. DIRECT INSTRUCTION / DISCOVERY
+9. DIRECT INSTRUCTION / DISCOVERY
    "If [Specific Problem], Do [Specific Action]."
    "If [Person] [Behaviour], Stop Doing This [Specific Thing]."
    "[Specific Situation] — Here's Why It Happens / What It Means."
    Promise an action only when the article actually gives useful advice.
+
+WHEN AND IF ARE BROAD EDITORIAL FRAMES, NOT TOPIC CATEGORIES. Either can
+package behaviours, signs, relationship dynamics, family situations, teen
+issues, emotional patterns, consequences, advice or other article-supported
+material. Choose the family based on logical structure, not subject matter:
+WHEN frames what becomes visible or happens under a condition or event;
+IF frames what follows, is implied or can be discovered when a condition
+applies.
 """
 
 EDITORIAL_DNA = """
@@ -172,7 +227,7 @@ invent a new style.
 
 {EDITORIAL_DNA}
 
-THE EIGHT HEADLINE FAMILIES:
+THE RESEARCHED HEADLINE FAMILIES:
 {FAMILIES}
 
 RESEARCH ANCHORS — STUDY THE MECHANICS, DO NOT COPY THE WORDING:
@@ -195,19 +250,22 @@ candidate mix, not permission to invent lists or inflate counts.
 If the article does not support a number, do not force one.
 
 CANDIDATE DIVERSITY:
-Generate ten candidates with meaningfully different angles. Where supported,
-explore several of these:
-- What the person does.
-- What the person says.
-- Signs that reveal a hidden reality.
-- What happens under a particular condition.
-- The consequence of a repeated behaviour.
-- An uncomfortable truth about the situation.
-- An unexpected interpretation.
-- A practical response or discovery.
+Generate ten distinct candidates. Give WHEN and IF deliberate attention:
+- Aim to include two WHEN candidates when distinct conditional-revelation
+  angles are supported; use one if only one strong angle fits.
+- Aim to include two IF candidates when distinct conditional-discovery
+  angles are supported; use one if only one strong angle fits.
+- WHEN may reveal behaviours, signs, words, reactions, relationship changes,
+  consequences, risks or any other meaningful supported outcome.
+- IF may reveal interpretations, outcomes, implications, experiences, signs,
+  consequences, advice or other supported discoveries.
+- Neither family is restricted to lists, behaviours or signs.
+- Do not force either family if the article offers no truthful, compelling
+  angle. Use remaining slots for other researched families.
 
-Do not force every family into every article. Do not generate ten versions
-of the same promise.
+Use remaining slots for distinct actions, statements, hidden signs,
+consequences, uncomfortable truths, reversals and useful discoveries.
+Do not generate ten versions of the same promise.
 
 REJECT THESE STYLES:
 - Essay excerpts and poetic observations.
@@ -229,14 +287,16 @@ because the account's niche often discusses narcissism.
 
 OUTPUT:
 Return exactly ten candidates if possible. Each candidate must include:
-family, headline, angle, curiosity_mechanism, and generation_score.
+family, headline, angle, curiosity_mechanism, and generation_score. Use the
+exact family IDs "when_conditional_revelation" and
+"if_conditional_discovery" for those two families.
 generation_score is an initial estimate, not the final editorial decision.
 
 Return only valid JSON:
 {{
   "candidates": [
     {{
-      "family": "behavioural_warning",
+      "family": "when_conditional_revelation",
       "headline": "Complete headline",
       "angle": "Distinct article-supported angle",
       "curiosity_mechanism": "recognition",
@@ -261,6 +321,24 @@ RESEARCHED FAMILIES:
 Evaluate each candidate against the article evidence packet and the exact
 headline research anchors. The examples are evidence of the target style;
 do not demand that every candidate copy their wording.
+
+WHEN TEST:
+A WHEN headline must connect a real situation, condition or event to a
+meaningful thing that becomes visible, happens, changes or is revealed.
+That revelation may be behaviour, signs, words, reactions, relationship
+dynamics, consequences, risks or another supported outcome. Do not judge
+it as weak merely because it is not a behaviour list.
+
+IF TEST:
+An IF headline must connect a real condition to a meaningful insight,
+outcome, implication or discovery. That may be an interpretation, experience,
+sign, pattern, consequence, advice or other article-supported revelation.
+Do not judge it as weak merely because it is not a checklist or reader
+self-recognition headline.
+
+For both families, assess the logic of the condition-to-revelation link,
+the specificity of the promise and whether the article supports it. The
+opening word alone does not make a candidate a good example of the family.
 
 SCORE EACH DIMENSION FROM 1 TO 10:
 1. article_fidelity: Is the promise genuinely supported?
@@ -393,16 +471,17 @@ def _compact_analysis(analysis: dict) -> dict:
         value = analysis.get(key, "")
         packet[key] = str(value or "")[:limit]
 
+    # Preserve useful evidence while shrinking the repeated downstream packet.
     list_limits = {
-        "key_points": (10, 240),
-        "observable_behaviours": (10, 220),
-        "consequences": (8, 220),
-        "surprising_insights": (6, 220),
-        "practical_actions": (8, 180),
-        "strongest_headline_angles": (8, 220),
-        "unsupported_claims_to_avoid": (10, 180),
-        "usable_numbered_material": (8, 220),
-        "evidence_excerpts": (8, 260),
+        "key_points": (8, 190),
+        "observable_behaviours": (8, 180),
+        "consequences": (6, 180),
+        "surprising_insights": (5, 180),
+        "practical_actions": (5, 150),
+        "strongest_headline_angles": (6, 180),
+        "unsupported_claims_to_avoid": (6, 150),
+        "usable_numbered_material": (6, 180),
+        "evidence_excerpts": (5, 190),
     }
     for key, (count, length) in list_limits.items():
         values = analysis.get(key, [])
@@ -442,7 +521,7 @@ def _try_groq(
     if not api_key:
         raise RuntimeError("GROQ_API_KEY is not configured.")
 
-    client = Groq(api_key=api_key)
+    client = Groq(api_key=api_key, max_retries=0)
     combined_prompt = (
         system_prompt.strip()
         + "\n\n"
@@ -453,15 +532,53 @@ def _try_groq(
         + prompt.strip()
     )
 
-    response = client.chat.completions.create(
-        model=GROQ_MODEL,
-        messages=[{"role": "user", "content": combined_prompt}],
-        temperature=temperature,
-        max_completion_tokens=8192,
-        response_format={"type": "json_object"},
-        reasoning_effort="medium",
-        include_reasoning=False,
-    )
+    request_args = {
+        "model": GROQ_MODEL,
+        "messages": [{"role": "user", "content": combined_prompt}],
+        "temperature": temperature,
+        "max_completion_tokens": 8192,
+        "response_format": {"type": "json_object"},
+        "reasoning_effort": "medium",
+        "include_reasoning": False,
+    }
+
+    # Retry once for a temporary 429, but never waste retries on exhausted TPD.
+    try:
+        response = client.chat.completions.create(**request_args)
+    except Exception as exc:
+        status_code = getattr(exc, "status_code", None)
+        error_text = str(getattr(exc, "body", "") or exc).casefold()
+        is_daily_limit = any(
+            marker in error_text
+            for marker in ("tokens per day", "per-day", "daily token", "tpd")
+        )
+        if status_code != 429 or is_daily_limit:
+            raise
+
+        headers = getattr(getattr(exc, "response", None), "headers", {}) or {}
+        try:
+            wait_seconds = min(
+                30.0, max(1.0, float(headers.get("retry-after", 5)))
+            )
+        except (TypeError, ValueError):
+            wait_seconds = 5.0
+
+        log.warning(
+            "  Groq temporary rate limit; waiting %.1fs before one retry",
+            wait_seconds,
+        )
+        time.sleep(wait_seconds)
+        response = client.chat.completions.create(**request_args)
+
+    usage = getattr(response, "usage", None)
+    if usage:
+        log.info(
+            "  Groq usage: prompt=%s completion=%s total=%s tokens",
+            getattr(usage, "prompt_tokens", "?"),
+            getattr(usage, "completion_tokens", "?"),
+            getattr(usage, "total_tokens", "?"),
+        )
+
     content = response.choices[0].message.content
     if not content:
         raise ValueError("Groq returned an empty response.")
@@ -543,22 +660,25 @@ ARTICLE TITLE:
 {title}
 
 ARTICLE EVIDENCE PACKET:
-{json.dumps(analysis, ensure_ascii=False, indent=2)}
+{json.dumps(analysis, ensure_ascii=False, separators=(",", ":"))}
 
 PREVIOUS HEADLINES FOR THIS ARTICLE:
-{json.dumps(recent_headlines, ensure_ascii=False, indent=2)}
+{json.dumps(recent_headlines, ensure_ascii=False, separators=(",", ":"))}
 
-Generate ten distinct Pinterest headline candidates from the evidence packet.
-Use different editorial angles, not cosmetic rewrites.
-Aim for approximately nine numbered candidates only if the evidence supports
-genuinely countable material. If it does not, use truthful alternatives.
+Generate ten distinct Pinterest headlines. Aim to include two WHEN and two
+IF candidates when distinct, truthful angles are supported; use one if only
+one strong angle fits, and never force either family.
 
-Use the eight researched families and editorial instincts in your instructions.
-Do not copy research examples. Do not invent evidence, numbers, behaviours,
-signs, consequences or advice. Do not repeat the title or previous headlines.
+WHEN connects a condition or event to what becomes visible, happens, changes
+or is revealed. IF connects a condition to a meaningful insight, outcome,
+implication or discovery. Both can cover behaviours, signs, words, dynamics,
+consequences, interpretations, advice or other supported material. Neither
+is restricted to a list.
 
-Every headline must be immediately understandable and must sound like a
-Pinterest headline, not a poetic or reflective essay sentence.
+Aim for nine numbered candidates only when the article supports honest counts.
+Use all researched families where they fit. Do not copy examples or invent
+evidence, numbers, signs, behaviours, consequences or advice. Avoid title
+repetition, previous headlines and poetic or reflective essay sentences.
 
 Return the required JSON.
 """
@@ -580,17 +700,21 @@ ARTICLE TITLE:
 {title}
 
 ARTICLE EVIDENCE PACKET:
-{json.dumps(analysis, ensure_ascii=False, indent=2)}
+{json.dumps(analysis, ensure_ascii=False, separators=(",", ":"))}
 
 CANDIDATES TO EVALUATE:
-{json.dumps(candidates, ensure_ascii=False, indent=2)}
+{json.dumps(candidates, ensure_ascii=False, separators=(",", ":"))}
 
 PREVIOUS HEADLINES:
-{json.dumps(recent_headlines, ensure_ascii=False, indent=2)}
+{json.dumps(recent_headlines, ensure_ascii=False, separators=(",", ":"))}
 
-Evaluate every candidate independently. Score all seven dimensions.
-Do not rewrite candidates. Do not approve weak headlines to fill a quota.
-A candidate must be rejected if the packet does not support its promise.
+Evaluate every candidate independently and score all seven dimensions.
+Do not rewrite candidates or approve weak headlines to fill a quota. Reject
+unsupported promises.
+
+For WHEN, judge the condition-to-revelation link, not whether it describes
+behaviour. For IF, judge the condition-to-discovery link, not whether it is
+a checklist.
 
 Return one evaluation for every candidate using the required JSON structure.
 """
