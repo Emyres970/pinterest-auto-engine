@@ -1,9 +1,9 @@
 
-name: Pinterest Automation
+name: Pinterest Automation — Narc Spotlight
 
 on:
   schedule:
-    - cron: '0 8 * * *'
+    - cron: '0 12 * * *'
   workflow_dispatch:
 
 permissions:
@@ -34,16 +34,16 @@ jobs:
             echo "$PINTEREST_COOKIES_B64" | base64 -d > .pinterest_cookies.json
             echo "Session cookies restored."
           else
-            echo "No PINTEREST_COOKIES_B64 secret found — will log in fresh with email/password."
+            echo "No PINTEREST_COOKIES_B64_ACC2 secret found — will log in fresh with email/password."
           fi
         env:
-          PINTEREST_COOKIES_B64: ${{ secrets.PINTEREST_COOKIES_B64 }}
+          PINTEREST_COOKIES_B64: ${{ secrets.PINTEREST_COOKIES_B64_ACC2 }}
 
       - name: Clear Pinterest drafts
         continue-on-error: true
         env:
-          PINTEREST_EMAIL: ${{ secrets.PINTEREST_EMAIL }}
-          PINTEREST_PASSWORD: ${{ secrets.PINTEREST_PASSWORD }}
+          PINTEREST_EMAIL: ${{ secrets.PINTEREST_EMAIL_ACC2 }}
+          PINTEREST_PASSWORD: ${{ secrets.PINTEREST_PASSWORD_ACC2 }}
         run: python clear_drafts.py
 
       - name: Run automation
@@ -51,9 +51,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
           CEREBRAS_API_KEY: ${{ secrets.CEREBRAS_API_KEY }}
-          PINTEREST_EMAIL: ${{ secrets.PINTEREST_EMAIL }}
-          PINTEREST_PASSWORD: ${{ secrets.PINTEREST_PASSWORD }}
-          PINTEREST_BOARD_NAME: ${{ secrets.PINTEREST_BOARD_NAME }}
+          PINTEREST_EMAIL: ${{ secrets.PINTEREST_EMAIL_ACC2 }}
+          PINTEREST_PASSWORD: ${{ secrets.PINTEREST_PASSWORD_ACC2 }}
+          PINTEREST_BOARD_MAP: ${{ secrets.PINTEREST_BOARD_MAP_ACC2 }}
           BRAND_NAME: ${{ secrets.BRAND_NAME }}
           BRAND_URL: ${{ secrets.BRAND_URL }}
           PINS_PER_DAY: 15
@@ -64,7 +64,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pinterest-cookies-${{ github.run_number }}
+          name: narc-spotlight-cookies-${{ github.run_number }}
           path: .pinterest_cookies.json
           retention-days: 35
           if-no-files-found: ignore
@@ -73,7 +73,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: pinterest-debug-${{ github.run_number }}
+          name: narc-spotlight-debug-${{ github.run_number }}
           path: |
             output/_debug_*.png
             output/_debug_*.html
@@ -85,5 +85,5 @@ jobs:
           git config user.name 'PinterestBot'
           git config user.email 'bot@noreply.github.com'
           git add tracker.csv
-          git diff --staged --quiet || git commit -m "chore: update tracker $(date -u +%Y-%m-%d)"
+          git diff --staged --quiet || git commit -m "chore: update tracker $(date -u +%Y-%m-%d) [acc2]"
           git push
