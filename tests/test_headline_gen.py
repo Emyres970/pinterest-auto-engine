@@ -129,6 +129,14 @@ def make_response(content):
     )
 
 
+def cerebras_test_modules(fake_sdk):
+    return {
+        "cerebras": types.ModuleType("cerebras"),
+        "cerebras.cloud": types.ModuleType("cerebras.cloud"),
+        "cerebras.cloud.sdk": fake_sdk,
+    }
+
+
 class HeadlineFrameworkTests(unittest.TestCase):
 
     def setUp(self):
@@ -155,7 +163,8 @@ class HeadlineFrameworkTests(unittest.TestCase):
         )
 
         for family in families:
-            self.assertIn(family, GENERATION_SYSTEM_PROMPT)
+            with self.subTest(family=family):
+                self.assertIn(family, GENERATION_SYSTEM_PROMPT)
 
     def test_when_and_if_have_distinct_family_identifiers(self):
         self.assertIn(
@@ -201,19 +210,24 @@ class HeadlineFrameworkTests(unittest.TestCase):
         )
 
         for example in examples:
-            self.assertIn(example, SYSTEM_PROMPT)
+            with self.subTest(example=example):
+                self.assertIn(example, SYSTEM_PROMPT)
 
     def test_positive_headline_anchor_is_present(self):
         self.assertIn(
-            "Understand The System: Why a Narcissist Can't",
+            "Understand The System: Why A Narcissist Can't",
             GENERATION_SYSTEM_PROMPT,
         )
 
     def test_quote_like_negative_style_is_explicitly_rejected(self):
+        prompt = GENERATION_SYSTEM_PROMPT.casefold()
+
         self.assertIn(
-            "Narcissistic Abuse Doesn't Just Hurt You",
-            GENERATION_SYSTEM_PROMPT,
+            "doesn't just hurt you, it steals",
+            prompt,
         )
+        self.assertIn("poetic observations", prompt)
+        self.assertIn("dramatic quote-like statements", prompt)
 
     def test_numbered_candidates_remain_the_approximate_ninety_percent_target(self):
         prompt = GENERATION_SYSTEM_PROMPT.casefold()
@@ -226,9 +240,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
         )
 
     def test_numbered_headline_detector_accepts_digits_and_words(self):
-        self.assertTrue(
-            _is_numbered_headline("7 Things Narcissists Do")
-        )
+        self.assertTrue(_is_numbered_headline("7 Things Narcissists Do"))
         self.assertTrue(
             _is_numbered_headline("Seven Signs of a Difficult Marriage")
         )
@@ -304,10 +316,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
     def test_analysis_prompt_contains_complete_article(self):
         body = "This is the complete article text. " * 1500
 
-        prompt = _build_analysis_prompt(
-            "Article title",
-            body,
-        )
+        prompt = _build_analysis_prompt("Article title", body)
 
         self.assertIn(body, prompt)
         self.assertIn("COMPLETE ARTICLE BODY", prompt)
@@ -334,10 +343,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
             result["central_subject"],
             "Narcissistic relationship behaviour",
         )
-        self.assertEqual(
-            result["maximum_honest_count"],
-            5,
-        )
+        self.assertEqual(result["maximum_honest_count"], 5)
         self.assertTrue(result["numbered_headline_supported"])
         self.assertIn("evidence_excerpts", result)
 
@@ -350,10 +356,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
             return_value=analysis,
         ):
             with self.assertRaises(ValueError):
-                _analyse_article(
-                    "Article title",
-                    "Article body",
-                )
+                _analyse_article("Article title", "Article body")
 
     def test_analysis_rejects_missing_central_argument(self):
         analysis = make_analysis()
@@ -364,10 +367,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
             return_value=analysis,
         ):
             with self.assertRaises(ValueError):
-                _analyse_article(
-                    "Article title",
-                    "Article body",
-                )
+                _analyse_article("Article title", "Article body")
 
     def test_analysis_rejects_empty_article(self):
         with self.assertRaises(ValueError):
@@ -386,15 +386,9 @@ class HeadlineFrameworkTests(unittest.TestCase):
             recent_headlines=history,
         )
 
-        self.assertIn(
-            "Narcissistic relationship behaviour",
-            prompt,
-        )
+        self.assertIn("Narcissistic relationship behaviour", prompt)
         self.assertIn("An older headline", prompt)
-        self.assertIn(
-            "Another previously generated headline",
-            prompt,
-        )
+        self.assertIn("Another previously generated headline", prompt)
 
     def test_headline_prompt_uses_evidence_packet_not_full_article(self):
         body = "UNIQUE_FULL_ARTICLE_BODY_MARKER"
@@ -410,16 +404,13 @@ class HeadlineFrameworkTests(unittest.TestCase):
         self.assertIn("ARTICLE EVIDENCE PACKET", prompt)
 
     def test_evaluation_prompt_contains_analysis_candidates_and_history(self):
-        candidates = [
-            {
-                "family": "behavioural_warning",
-                "headline": (
-                    "Seven Things Narcissists Do "
-                    "When They Want Admiration"
-                ),
-                "score": 9,
-            },
-        ]
+        candidates = [{
+            "family": "behavioural_warning",
+            "headline": (
+                "Seven Things Narcissists Do When They Want Admiration"
+            ),
+            "score": 9,
+        }]
 
         prompt = _build_evaluation_prompt(
             "Article title",
@@ -429,19 +420,10 @@ class HeadlineFrameworkTests(unittest.TestCase):
             ["An older headline"],
         )
 
-        self.assertIn(
-            "Narcissistic relationship behaviour",
-            prompt,
-        )
-        self.assertIn(
-            "Seven Things Narcissists Do",
-            prompt,
-        )
+        self.assertIn("Narcissistic relationship behaviour", prompt)
+        self.assertIn("Seven Things Narcissists Do", prompt)
         self.assertIn("An older headline", prompt)
-        self.assertNotIn(
-            "The full article is not repeated.",
-            prompt,
-        )
+        self.assertNotIn("The full article is not repeated.", prompt)
 
     # ---------------------------------------------------------------
     # EDITORIAL APPROVAL
@@ -451,7 +433,6 @@ class HeadlineFrameworkTests(unittest.TestCase):
         headline = (
             "Seven Things Narcissists Do When They Want Admiration"
         )
-
         candidates = [{
             "family": "behavioural_warning",
             "headline": headline,
@@ -460,11 +441,9 @@ class HeadlineFrameworkTests(unittest.TestCase):
 
         approved = _approved_candidate_headlines(
             candidates,
-            [
-                make_evaluation(
-                    "A completely new headline invented by the evaluator"
-                )
-            ],
+            [make_evaluation(
+                "A completely new headline invented by the evaluator"
+            )],
         )
 
         self.assertEqual(approved, [])
@@ -473,7 +452,6 @@ class HeadlineFrameworkTests(unittest.TestCase):
         headline = (
             "Seven Things Narcissists Do When They Want Admiration"
         )
-
         candidates = [{
             "family": "behavioural_warning",
             "headline": headline,
@@ -491,7 +469,6 @@ class HeadlineFrameworkTests(unittest.TestCase):
         headline = (
             "Seven Things Narcissists Do When They Want Admiration"
         )
-
         candidates = [{
             "family": "behavioural_warning",
             "headline": headline,
@@ -500,12 +477,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
 
         approved = _approved_candidate_headlines(
             candidates,
-            [
-                make_evaluation(
-                    headline,
-                    score=6,
-                )
-            ],
+            [make_evaluation(headline, score=6)],
         )
 
         self.assertEqual(approved, [])
@@ -514,7 +486,6 @@ class HeadlineFrameworkTests(unittest.TestCase):
         headline = (
             "Seven Things Narcissists Do When They Want Admiration"
         )
-
         candidates = [{
             "family": "behavioural_warning",
             "headline": headline,
@@ -523,12 +494,10 @@ class HeadlineFrameworkTests(unittest.TestCase):
 
         approved = _approved_candidate_headlines(
             candidates,
-            [
-                make_evaluation(
-                    headline,
-                    dimensions=make_dimensions(fidelity=6),
-                )
-            ],
+            [make_evaluation(
+                headline,
+                dimensions=make_dimensions(fidelity=6),
+            )],
         )
 
         self.assertEqual(approved, [])
@@ -537,7 +506,6 @@ class HeadlineFrameworkTests(unittest.TestCase):
         headline = (
             "Seven Things Narcissists Do When They Want Admiration"
         )
-
         candidates = [{
             "family": "behavioural_warning",
             "headline": headline,
@@ -546,12 +514,10 @@ class HeadlineFrameworkTests(unittest.TestCase):
 
         approved = _approved_candidate_headlines(
             candidates,
-            [
-                make_evaluation(
-                    headline,
-                    dimensions=make_dimensions(clarity=6),
-                )
-            ],
+            [make_evaluation(
+                headline,
+                dimensions=make_dimensions(clarity=6),
+            )],
         )
 
         self.assertEqual(approved, [])
@@ -560,7 +526,6 @@ class HeadlineFrameworkTests(unittest.TestCase):
         headline = (
             "Seven Things Narcissists Do When They Want Admiration"
         )
-
         candidates = [{
             "family": "behavioural_warning",
             "headline": headline,
@@ -569,12 +534,10 @@ class HeadlineFrameworkTests(unittest.TestCase):
 
         approved = _approved_candidate_headlines(
             candidates,
-            [
-                make_evaluation(
-                    headline,
-                    dimensions=make_dimensions(specificity=6),
-                )
-            ],
+            [make_evaluation(
+                headline,
+                dimensions=make_dimensions(specificity=6),
+            )],
         )
 
         self.assertEqual(approved, [])
@@ -583,7 +546,6 @@ class HeadlineFrameworkTests(unittest.TestCase):
         headline = (
             "Seven Things Narcissists Do When They Want Admiration"
         )
-
         candidates = [{
             "family": "behavioural_warning",
             "headline": headline,
@@ -592,12 +554,10 @@ class HeadlineFrameworkTests(unittest.TestCase):
 
         approved = _approved_candidate_headlines(
             candidates,
-            [
-                make_evaluation(
-                    headline,
-                    dimensions=make_dimensions(readability=6),
-                )
-            ],
+            [make_evaluation(
+                headline,
+                dimensions=make_dimensions(readability=6),
+            )],
         )
 
         self.assertEqual(approved, [])
@@ -606,7 +566,6 @@ class HeadlineFrameworkTests(unittest.TestCase):
         headline = (
             "Seven Things Narcissists Do When They Want Admiration"
         )
-
         candidates = [{
             "family": "behavioural_warning",
             "headline": headline,
@@ -775,7 +734,6 @@ class HeadlineFrameworkTests(unittest.TestCase):
         headline = (
             "Seven Things Narcissists Do When They Want Admiration"
         )
-
         data = {
             "candidates": [{
                 "family": "behavioural_warning",
@@ -795,7 +753,6 @@ class HeadlineFrameworkTests(unittest.TestCase):
         headline = (
             "Seven Things Narcissists Do When They Want Admiration"
         )
-
         data = {
             "candidates": [{
                 "family": "behavioural_warning",
@@ -816,7 +773,6 @@ class HeadlineFrameworkTests(unittest.TestCase):
             "Narcissistic Abuse Doesn't Just Hurt You; "
             "It Steals Your Right To Trust Your Own Experience."
         )
-
         data = {
             "candidates": [{
                 "family": "relationship_consequences",
@@ -834,7 +790,6 @@ class HeadlineFrameworkTests(unittest.TestCase):
 
     def test_blue_words_must_appear_in_selected_headline(self):
         headline = "Five Things a Narcissist Does After You Say No"
-
         data = {
             "candidates": [{
                 "family": "behavioural_warning",
@@ -866,7 +821,9 @@ class HeadlineFrameworkTests(unittest.TestCase):
     def test_cerebras_retries_once_after_malformed_json(self):
         valid_analysis = {
             "central_subject": "Marriage",
-            "central_argument": "The article explains a relationship pattern.",
+            "central_argument": (
+                "The article explains a relationship pattern."
+            ),
         }
 
         fake_sdk = types.ModuleType("cerebras.cloud.sdk")
@@ -879,11 +836,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
 
         with patch.dict(
             sys.modules,
-            {
-                "cerebras": types.ModuleType("cerebras"),
-                "cerebras.cloud": types.ModuleType("cerebras.cloud"),
-                "cerebras.cloud.sdk": fake_sdk,
-            },
+            cerebras_test_modules(fake_sdk),
         ), patch.dict(
             "os.environ",
             {"CEREBRAS_API_KEY": "test-key"},
@@ -895,10 +848,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
                 stage="analysis",
             )
 
-        self.assertEqual(
-            result["central_subject"],
-            "Marriage",
-        )
+        self.assertEqual(result["central_subject"], "Marriage")
         self.assertEqual(
             fake_client.chat.completions.create.call_count,
             2,
@@ -908,11 +858,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
             fake_client.chat.completions.create.call_args_list[1]
         )
 
-        self.assertEqual(
-            retry_call.kwargs["temperature"],
-            0.2,
-        )
-
+        self.assertEqual(retry_call.kwargs["temperature"], 0.2)
         self.assertIn(
             "RECOVERY INSTRUCTION",
             retry_call.kwargs["messages"][0]["content"],
@@ -920,12 +866,10 @@ class HeadlineFrameworkTests(unittest.TestCase):
 
     def test_cerebras_retries_after_structurally_invalid_json(self):
         valid_generation = {
-            "candidates": [
-                {
-                    "headline": "Seven Things That Change a Marriage",
-                    "family": "behavioural_warning",
-                }
-            ]
+            "candidates": [{
+                "headline": "Seven Things That Change a Marriage",
+                "family": "behavioural_warning",
+            }]
         }
 
         fake_sdk = types.ModuleType("cerebras.cloud.sdk")
@@ -938,11 +882,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
 
         with patch.dict(
             sys.modules,
-            {
-                "cerebras": types.ModuleType("cerebras"),
-                "cerebras.cloud": types.ModuleType("cerebras.cloud"),
-                "cerebras.cloud.sdk": fake_sdk,
-            },
+            cerebras_test_modules(fake_sdk),
         ), patch.dict(
             "os.environ",
             {"CEREBRAS_API_KEY": "test-key"},
@@ -970,11 +910,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
 
         with patch.dict(
             sys.modules,
-            {
-                "cerebras": types.ModuleType("cerebras"),
-                "cerebras.cloud": types.ModuleType("cerebras.cloud"),
-                "cerebras.cloud.sdk": fake_sdk,
-            },
+            cerebras_test_modules(fake_sdk),
         ), patch.dict(
             "os.environ",
             {"CEREBRAS_API_KEY": "test-key"},
@@ -994,18 +930,14 @@ class HeadlineFrameworkTests(unittest.TestCase):
     def test_cerebras_does_not_retry_provider_api_errors(self):
         fake_sdk = types.ModuleType("cerebras.cloud.sdk")
         fake_client = MagicMock()
-        fake_client.chat.completions.create.side_effect = (
-            RuntimeError("Cerebras service unavailable")
+        fake_client.chat.completions.create.side_effect = RuntimeError(
+            "Cerebras service unavailable"
         )
         fake_sdk.Cerebras = MagicMock(return_value=fake_client)
 
         with patch.dict(
             sys.modules,
-            {
-                "cerebras": types.ModuleType("cerebras"),
-                "cerebras.cloud": types.ModuleType("cerebras.cloud"),
-                "cerebras.cloud.sdk": fake_sdk,
-            },
+            cerebras_test_modules(fake_sdk),
         ), patch.dict(
             "os.environ",
             {"CEREBRAS_API_KEY": "test-key"},
@@ -1030,7 +962,13 @@ class HeadlineFrameworkTests(unittest.TestCase):
     # ---------------------------------------------------------------
 
     def test_daily_quota_error_marks_groq_as_exhausted(self):
-        with patch(
+        with patch.dict(
+            "os.environ",
+            {
+                "GROQ_API_KEY": "groq-test-key",
+                "CEREBRAS_API_KEY": "cerebras-test-key",
+            },
+        ), patch(
             "modules.headline_gen._try_groq",
             side_effect=RuntimeError(
                 "Rate limit reached: tokens per day exceeded"
@@ -1045,29 +983,24 @@ class HeadlineFrameworkTests(unittest.TestCase):
                 stage="analysis",
             )
 
-        self.assertEqual(
-            result["central_subject"],
-            "Marriage",
-        )
-        self.assertTrue(
-            headline_gen.GROQ_DAILY_LIMIT_REACHED
-        )
+        self.assertEqual(result["central_subject"], "Marriage")
+        self.assertTrue(headline_gen.GROQ_DAILY_LIMIT_REACHED)
 
     def test_groq_is_skipped_after_daily_quota_is_exhausted(self):
         headline_gen.GROQ_DAILY_LIMIT_REACHED = True
 
-        with patch(
-            "modules.headline_gen._try_groq"
-        ) as groq_mock, patch(
-            "modules.headline_gen._try_cerebras",
-            return_value={"central_subject": "Marriage"},
-        ) as cerebras_mock, patch.dict(
+        with patch.dict(
             "os.environ",
             {
                 "GROQ_API_KEY": "groq-test-key",
                 "CEREBRAS_API_KEY": "cerebras-test-key",
             },
-        ):
+        ), patch(
+            "modules.headline_gen._try_groq"
+        ) as groq_mock, patch(
+            "modules.headline_gen._try_cerebras",
+            return_value={"central_subject": "Marriage"},
+        ) as cerebras_mock:
             result = headline_gen._call_model(
                 ANALYSIS_SYSTEM_PROMPT,
                 "Analyse the next article.",
@@ -1076,13 +1009,16 @@ class HeadlineFrameworkTests(unittest.TestCase):
 
         groq_mock.assert_not_called()
         cerebras_mock.assert_called_once()
-        self.assertEqual(
-            result["central_subject"],
-            "Marriage",
-        )
+        self.assertEqual(result["central_subject"], "Marriage")
 
     def test_temporary_groq_failure_does_not_mark_daily_quota_exhausted(self):
-        with patch(
+        with patch.dict(
+            "os.environ",
+            {
+                "GROQ_API_KEY": "groq-test-key",
+                "CEREBRAS_API_KEY": "cerebras-test-key",
+            },
+        ), patch(
             "modules.headline_gen._try_groq",
             side_effect=RuntimeError("Temporary connection failure"),
         ), patch(
@@ -1095,9 +1031,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
                 stage="analysis",
             )
 
-        self.assertFalse(
-            headline_gen.GROQ_DAILY_LIMIT_REACHED
-        )
+        self.assertFalse(headline_gen.GROQ_DAILY_LIMIT_REACHED)
 
     # ---------------------------------------------------------------
     # THREE-STAGE PIPELINE AND PUBLIC INTERFACE
@@ -1121,14 +1055,18 @@ class HeadlineFrameworkTests(unittest.TestCase):
                     "family": "behavioural_warning",
                     "headline": first_headline,
                     "generation_score": 9,
-                    "angle": "Recognisable behaviours linked to admiration",
+                    "angle": (
+                        "Recognisable behaviours linked to admiration"
+                    ),
                     "curiosity_mechanism": "recognition",
                 },
                 {
                     "family": "uncomfortable_truth",
                     "headline": second_headline,
                     "generation_score": 8,
-                    "angle": "The uncomfortable cost of demanding worship",
+                    "angle": (
+                        "The uncomfortable cost of demanding worship"
+                    ),
                     "curiosity_mechanism": "consequence",
                 },
             ],
@@ -1170,23 +1108,11 @@ class HeadlineFrameworkTests(unittest.TestCase):
         self.assertNotIn(body, generation_call.args[1])
         self.assertNotIn(body, evaluation_call.args[1])
 
-        self.assertIn(
-            "An older headline",
-            generation_call.args[1],
-        )
-        self.assertIn(
-            "An older headline",
-            evaluation_call.args[1],
-        )
+        self.assertIn("An older headline", generation_call.args[1])
+        self.assertIn("An older headline", evaluation_call.args[1])
 
-        self.assertEqual(
-            result["headline"],
-            first_headline,
-        )
-        self.assertEqual(
-            result["family"],
-            "behavioural_warning",
-        )
+        self.assertEqual(result["headline"], first_headline)
+        self.assertEqual(result["family"], "behavioural_warning")
         self.assertIn("candidates", result)
         self.assertIn("blue_words", result)
         self.assertIn("emotion", result)
@@ -1207,9 +1133,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
         }
 
         evaluations = {
-            "evaluations": [
-                make_evaluation(first_headline)
-            ]
+            "evaluations": [make_evaluation(first_headline)]
         }
 
         with patch(
