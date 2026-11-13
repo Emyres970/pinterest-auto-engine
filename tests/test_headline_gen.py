@@ -962,6 +962,14 @@ class HeadlineFrameworkTests(unittest.TestCase):
     # ---------------------------------------------------------------
 
     def test_daily_quota_error_marks_groq_as_exhausted(self):
+        def simulate_groq_daily_limit(*args, **kwargs):
+            # The real _try_groq() sets this process-level circuit breaker
+            # before raising a daily-token-limit error.
+            headline_gen.GROQ_DAILY_LIMIT_REACHED = True
+            raise RuntimeError(
+                "Rate limit reached: tokens per day exceeded"
+            )
+
         with patch.dict(
             "os.environ",
             {
@@ -970,9 +978,7 @@ class HeadlineFrameworkTests(unittest.TestCase):
             },
         ), patch(
             "modules.headline_gen._try_groq",
-            side_effect=RuntimeError(
-                "Rate limit reached: tokens per day exceeded"
-            ),
+            side_effect=simulate_groq_daily_limit,
         ), patch(
             "modules.headline_gen._try_cerebras",
             return_value={"central_subject": "Marriage"},
