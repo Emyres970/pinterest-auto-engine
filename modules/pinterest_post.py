@@ -1,3 +1,4 @@
+
 import os
 import json
 import logging
@@ -251,7 +252,16 @@ def _login(page):
         page.wait_for_timeout(700)
         page.locator('[id="password"]').fill(os.getenv("PINTEREST_PASSWORD", ""))
         page.wait_for_timeout(700)
-        page.locator('[data-test-id="registerFormSubmitButton"]').click()
+
+        # Pinterest's current login DOM (verified from run #448 diagnostics)
+        # exposes one submit button inside the accessible login form. The old
+        # registerFormSubmitButton data-test-id is no longer present.
+        login_submit = page.locator(
+            'form[aria-label="login form"] button[type="submit"]'
+        )
+        login_submit.wait_for(state="visible", timeout=10000)
+        login_submit.click(timeout=10000)
+
         _wait_load(page, timeout=40000)
         page.wait_for_timeout(4000)
         log.info(f"Post-login URL: {page.url}")
@@ -778,7 +788,6 @@ def _select_board(page, board_name: str):
         f'div[role="option"]:has-text("{board_name}")',
         f'li:has-text("{board_name}")',
         f'button:has-text("{board_name}")',
-        # Generic: any element in the dropdown list containing the board name
         f'ul >> text="{board_name}"',
         f'[role="listbox"] >> text="{board_name}"',
     ]:
@@ -793,10 +802,7 @@ def _select_board(page, board_name: str):
             continue
 
     if not clicked:
-        # Last resort: click whatever is first in the result list (the search already
-        # filtered to the board name, so the first non-"Create board" item is ours)
         try:
-            # The board thumbnail image is always present — click its parent row
             result = page.locator('img[alt*="' + board_name + '" i]').first
             if result.count():
                 result.click(timeout=5000)
@@ -877,8 +883,6 @@ def post_pin(image_path: str, title: str, description: str, link: str, board_nam
         log.info(f"  Page URL  : {page.url}")
         _upload_image(page, image_path)
 
-        # If the account hit the 50-draft ceiling, bulk-delete all drafts then
-        # re-navigate and re-upload so the creation flow starts clean.
         if _clear_draft_limit(page):
             page.goto("https://www.pinterest.com/pin-creation-tool/", timeout=45000)
             _wait_load(page)
