@@ -694,10 +694,11 @@ def _try_cerebras(
         return _validate_stage_response(parsed, stage)
 
     except (ValueError, json.JSONDecodeError) as first_error:
+        first_error_message = str(first_error)
         log.warning(
             "  Cerebras returned an unusable %s response: %s",
             stage,
-            first_error,
+            first_error_message,
         )
 
     # One focused retry. Keep the original instructions and task, but make
@@ -707,7 +708,7 @@ def _try_cerebras(
         + "\n\n"
         + "RECOVERY INSTRUCTION:\n"
         + f"Your previous response for the {stage} stage was unusable: "
-        + str(first_error)[:500]
+        + first_error_message[:500]
         + "\nReturn a complete, corrected JSON object now. "
         + "Do not return commentary, markdown fences, or an explanation. "
         + "Include every required field and the required non-empty stage "
@@ -745,7 +746,7 @@ def _try_cerebras(
         raise RuntimeError(
             f"Cerebras could not produce a valid {stage} response "
             f"after one recovery attempt. "
-            f"First response: {first_error}. "
+            f"First response: {first_error_message}. "
             f"Recovery response: {retry_error}"
         ) from retry_error
 
