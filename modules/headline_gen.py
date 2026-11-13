@@ -1,4 +1,3 @@
-
 """
 Pinterest headline generation: research-led, three-stage editorial system.
 
@@ -26,6 +25,10 @@ log = logging.getLogger(__name__)
 
 GROQ_MODEL = "openai/gpt-oss-120b"
 CEREBRAS_MODEL = "gpt-oss-120b"
+
+# This circuit breaker lasts for the lifetime of the current Python process.
+# A new GitHub Actions run starts with Groq available again.
+GROQ_DAILY_LIMIT_REACHED = False
 
 NUMBER_WORDS = (
     "one", "two", "three", "four", "five", "six",
@@ -55,6 +58,7 @@ RESEARCH_ANCHORS = [
     "How To Silence A Narcissist With Just One Text",
     "Narcissistic Husbands Share One Pattern, And It's Terrifying",
     "If A Narcissist Is Cheating On You, These 14 Lines Will Always Show Up",
+    "Understand The System: Why A Narcissist Can't Tolerate These 7 Aspects Of You",
 ]
 
 FAMILIES = """
@@ -348,6 +352,13 @@ Return only valid JSON:
 }}
 """
 
+# Retain the historical prompt name for any existing imports or integrations.
+SYSTEM_PROMPT = "\n\n".join((
+    ANALYSIS_SYSTEM_PROMPT,
+    GENERATION_SYSTEM_PROMPT,
+    EVALUATION_SYSTEM_PROMPT,
+))
+
 
 # ---------------------------------------------------------------------------
 # JSON AND TEXT HELPERS
@@ -454,6 +465,65 @@ def _compact_analysis(analysis: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# PROVIDER RESPONSE VALIDATION
+# ---------------------------------------------------------------------------
+
+def _validate_stage_response(data: dict, stage: str) -> dict:
+    """Reject valid JSON that does not contain the required stage output."""
+
+    if not isinstance(data, dict):
+        raise ValueError(f"{stage} response must be a JSON object.")
+
+    if stage == "analysis":
+        if not str(data.get("central_subject", "")).strip():
+            raise ValueError(
+                "Analysis response is missing central_subject."
+            )
+        if not str(data.get("central_argument", "")).strip():
+            raise ValueError(
+                "Analysis response is missing central_argument."
+            )
+
+    elif stage == "generation":
+        candidates = data.get("candidates")
+        if not isinstance(candidates, list):
+            raise ValueError(
+                "Generation response is missing the candidates list."
+            )
+
+        valid_candidates = [
+            item for item in candidates
+            if isinstance(item, dict)
+            and str(item.get("headline", "")).strip()
+        ]
+
+        if not valid_candidates:
+            raise ValueError(
+                "Generation response contains no usable headline candidates."
+            )
+
+    elif stage == "evaluation":
+        evaluations = data.get("evaluations")
+        if not isinstance(evaluations, list) or not evaluations:
+            raise ValueError(
+                "Evaluation response contains no evaluations."
+            )
+
+        valid_evaluations = [
+            item for item in evaluations
+            if isinstance(item, dict)
+            and str(item.get("headline", "")).strip()
+        ]
+
+        if not valid_evaluations:
+            raise ValueError(
+                "Evaluation response contains no usable evaluation entries."
+            )
+
+    return data
+
+
+# ---------------------------------------------------------------------------
 # PROVIDER HELPERS
 # ---------------------------------------------------------------------------
 
@@ -483,12 +553,28 @@ def _log_usage(provider: str, response) -> None:
     )
 
 
+def _is_groq_daily_limit_error(exc: Exception) -> bool:
+    error_text = str(getattr(exc, "body", "") or exc).casefold()
+
+    return any(
+        marker in error_text
+        for marker in (
+            "tokens per day",
+            "per-day",
+            "daily token",
+            "tpd",
+        )
+    )
+
+
 def _try_groq(
     prompt: str,
     system_prompt: str,
     temperature: float = 0.7,
     max_completion_tokens: int = 4096,
 ) -> dict:
+    global GROQ_DAILY_LIMIT_REACHED
+
     from groq import Groq
 
     api_key = os.getenv("GROQ_API_KEY")
@@ -515,19 +601,16 @@ def _try_groq(
 
     except Exception as exc:
         status_code = getattr(exc, "status_code", None)
-        error_text = str(getattr(exc, "body", "") or exc).casefold()
+        is_daily_limit = _is_groq_daily_limit_error(exc)
 
-        is_daily_limit = any(
-            marker in error_text
-            for marker in (
-                "tokens per day",
-                "per-day",
-                "daily token",
-                "tpd",
+        if is_daily_limit:
+            GROQ_DAILY_LIMIT_REACHED = True
+            log.error(
+                "  Groq daily token limit reached. "
+                "Groq will be skipped for the rest of this workflow run."
             )
-        )
 
-        # Do not waste time retrying an exhausted daily quota.
+        # Do not retry a daily quota limit or a non-rate-limit API error.
         if status_code != 429 or is_daily_limit:
             raise
 
@@ -564,7 +647,15 @@ def _try_cerebras(
     system_prompt: str,
     temperature: float = 0.7,
     max_completion_tokens: int = 4096,
+    stage: str = "unspecified",
 ) -> dict:
+    """
+    Call Cerebras once, then make one focused recovery request only when
+    its response is empty, malformed JSON, or structurally invalid.
+
+    API/network errors are allowed to propagate without an automatic retry.
+    """
+
     from cerebras.cloud.sdk import Cerebras
 
     api_key = os.getenv("CEREBRAS_API_KEY")
@@ -576,26 +667,87 @@ def _try_cerebras(
         max_retries=0,
     )
 
+    combined = _combined_prompt(system_prompt, prompt)
+
     request_args = {
         "model": CEREBRAS_MODEL,
         "messages": [{
             "role": "user",
-            "content": _combined_prompt(system_prompt, prompt),
+            "content": combined,
         }],
         "temperature": temperature,
         "max_completion_tokens": max_completion_tokens,
         "response_format": {"type": "json_object"},
     }
 
+    # First Cerebras attempt. API errors are not caught or retried here.
     response = client.chat.completions.create(**request_args)
-
     _log_usage("Cerebras", response)
 
     content = response.choices[0].message.content
-    if not content:
-        raise ValueError("Cerebras returned an empty response.")
 
-    return _parse_response(content)
+    try:
+        if not content:
+            raise ValueError("Cerebras returned an empty response.")
+
+        parsed = _parse_response(content)
+        return _validate_stage_response(parsed, stage)
+
+    except (ValueError, json.JSONDecodeError) as first_error:
+        log.warning(
+            "  Cerebras returned an unusable %s response: %s",
+            stage,
+            first_error,
+        )
+
+    # One focused retry. Keep the original instructions and task, but make
+    # the recovery requirement explicit and use a lower temperature.
+    recovery_prompt = (
+        prompt.strip()
+        + "\n\n"
+        + "RECOVERY INSTRUCTION:\n"
+        + f"Your previous response for the {stage} stage was unusable: "
+        + str(first_error)[:500]
+        + "\nReturn a complete, corrected JSON object now. "
+        + "Do not return commentary, markdown fences, or an explanation. "
+        + "Include every required field and the required non-empty stage "
+        + "content. Preserve the original task and evidence."
+    )
+
+    retry_args = dict(request_args)
+    retry_args["messages"] = [{
+        "role": "user",
+        "content": _combined_prompt(system_prompt, recovery_prompt),
+    }]
+    retry_args["temperature"] = min(float(temperature), 0.2)
+
+    log.warning(
+        "  Cerebras: making one structured-response recovery attempt "
+        "for the %s stage.",
+        stage,
+    )
+
+    # Deliberately outside the parse/validation try block: provider API
+    # failures on this request should propagate, not trigger another retry.
+    retry_response = client.chat.completions.create(**retry_args)
+    _log_usage("Cerebras retry", retry_response)
+
+    retry_content = retry_response.choices[0].message.content
+
+    try:
+        if not retry_content:
+            raise ValueError("Cerebras recovery response was empty.")
+
+        parsed = _parse_response(retry_content)
+        return _validate_stage_response(parsed, stage)
+
+    except (ValueError, json.JSONDecodeError) as retry_error:
+        raise RuntimeError(
+            f"Cerebras could not produce a valid {stage} response "
+            f"after one recovery attempt. "
+            f"First response: {first_error}. "
+            f"Recovery response: {retry_error}"
+        ) from retry_error
 
 
 def _call_model(
@@ -603,42 +755,51 @@ def _call_model(
     prompt: str,
     temperature: float = 0.7,
     max_completion_tokens: int = 4096,
+    stage: str = "unspecified",
 ) -> dict:
     """
-    Try Groq first. If it is unavailable, exhausted or returns an unusable
-    response, send the same request to Cerebras using GPT-OSS 120B.
+    Try Groq first unless its daily quota has already been exhausted.
 
-    If Groq is not configured, Cerebras becomes the primary available provider.
+    If Groq fails or returns an unusable response, use Cerebras. Once a
+    daily Groq quota error is detected, skip Groq for the rest of this
+    Python process and send later requests directly to Cerebras.
     """
 
     groq_key = os.getenv("GROQ_API_KEY")
     cerebras_key = os.getenv("CEREBRAS_API_KEY")
 
-    if groq_key:
-        log.info("  AI provider: Groq / %s", GROQ_MODEL)
+    if groq_key and not GROQ_DAILY_LIMIT_REACHED:
+        log.info(
+            "  AI provider [%s]: Groq / %s",
+            stage,
+            GROQ_MODEL,
+        )
 
         try:
-            return _try_groq(
+            result = _try_groq(
                 prompt,
                 system_prompt,
                 temperature,
                 max_completion_tokens,
             )
+            return _validate_stage_response(result, stage)
 
         except Exception as groq_error:
             log.warning(
-                "  Groq request failed; switching to Cerebras fallback: %s",
+                "  Groq failed during %s; switching to Cerebras: %s",
+                stage,
                 groq_error,
             )
 
             if not cerebras_key:
                 raise RuntimeError(
-                    f"Groq failed and CEREBRAS_API_KEY is not configured: "
-                    f"{groq_error}"
+                    f"Groq failed during {stage} and "
+                    f"CEREBRAS_API_KEY is not configured: {groq_error}"
                 ) from groq_error
 
             log.info(
-                "  AI fallback: Cerebras / %s",
+                "  AI fallback [%s]: Cerebras / %s",
+                stage,
                 CEREBRAS_MODEL,
             )
 
@@ -648,18 +809,30 @@ def _call_model(
                     system_prompt,
                     temperature,
                     max_completion_tokens,
+                    stage=stage,
                 )
             except Exception as cerebras_error:
-                log.exception("Cerebras fallback request failed.")
+                log.exception(
+                    "Cerebras fallback failed during %s.",
+                    stage,
+                )
                 raise RuntimeError(
-                    "Both AI providers failed. "
+                    f"Both AI providers failed during {stage}. "
                     f"Groq: {groq_error}. "
                     f"Cerebras: {cerebras_error}"
                 ) from cerebras_error
 
+    if groq_key and GROQ_DAILY_LIMIT_REACHED:
+        log.info(
+            "  AI provider [%s]: skipping Groq because its daily quota "
+            "was exhausted earlier in this workflow run.",
+            stage,
+        )
+
     if cerebras_key:
         log.info(
-            "  AI provider: Cerebras / %s (Groq key not configured)",
+            "  AI provider [%s]: Cerebras / %s",
+            stage,
             CEREBRAS_MODEL,
         )
         return _try_cerebras(
@@ -667,10 +840,11 @@ def _call_model(
             system_prompt,
             temperature,
             max_completion_tokens,
+            stage=stage,
         )
 
     raise RuntimeError(
-        "No AI provider is configured. Add GROQ_API_KEY or "
+        "No usable AI provider is configured. Add GROQ_API_KEY or "
         "CEREBRAS_API_KEY to GitHub Actions secrets."
     )
 
@@ -705,6 +879,7 @@ def _analyse_article(title: str, body: str) -> dict:
         _build_analysis_prompt(title, body),
         temperature=0.2,
         max_completion_tokens=3072,
+        stage="analysis",
     )
 
     if not result.get("central_subject"):
@@ -858,11 +1033,12 @@ def _evaluate_candidates(
         prompt,
         temperature=0.1,
         max_completion_tokens=4096,
+        stage="evaluation",
     )
 
     evaluations = result.get("evaluations")
 
-    if not isinstance(evaluations, list):
+    if not isinstance(evaluations, list) or not evaluations:
         raise ValueError(
             "Editorial evaluator returned no valid evaluations."
         )
@@ -996,6 +1172,9 @@ def _select_valid_result(
             "previous headline."
         )
 
+    # Preserve the researched preference for numbered Pinterest headlines.
+    # This is a modest tie-breaking advantage, not permission to select an
+    # unapproved headline or one that fails the editorial quality gates.
     selected = max(
         available,
         key=lambda item: (
@@ -1097,6 +1276,7 @@ def generate_headline(
         _build_headline_prompt(title, body, analysis, history),
         temperature=0.8,
         max_completion_tokens=4096,
+        stage="generation",
     )
 
     candidates = _clean_candidates(generated)
@@ -1111,10 +1291,22 @@ def generate_headline(
         if _is_numbered_headline(item["headline"])
     )
 
+    when_count = sum(
+        1 for item in candidates
+        if item["family"] == "when_conditional_revelation"
+    )
+
+    if_count = sum(
+        1 for item in candidates
+        if item["family"] == "if_conditional_discovery"
+    )
+
     log.info(
-        "  Generated : %s candidates; %s numbered",
+        "  Generated : %s candidates; %s numbered; %s WHEN; %s IF",
         len(candidates),
         numbered_count,
+        when_count,
+        if_count,
     )
 
     # Stage 3: independently score the exact candidate wording.
