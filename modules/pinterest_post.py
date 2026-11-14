@@ -91,16 +91,20 @@ def _is_logged_in(page) -> bool:
         return False
 
 
-def _capture_login_debug(page, reason: str):
-    """Save a privacy-conscious snapshot when Pinterest login automation fails.
+def _capture_login_debug(
+    page,
+    reason: str,
+    prefix: str = "_debug_pinterest_login_fail"
+):
+    """Save a privacy-conscious snapshot of Pinterest's current login state.
 
     Field values, cookies, scripts, and token-like attributes are deliberately
     excluded. The screenshot also hides editable fields before capture.
     """
     debug_dir = Path(__file__).parent.parent / "output"
     debug_dir.mkdir(parents=True, exist_ok=True)
-    screenshot_path = debug_dir / "_debug_pinterest_login_fail.png"
-    html_path = debug_dir / "_debug_pinterest_login_fail.html"
+    screenshot_path = debug_dir / f"{prefix}.png"
+    html_path = debug_dir / f"{prefix}.html"
 
     try:
         safe_url = page.url.split("?", 1)[0].split("#", 1)[0]
@@ -175,8 +179,10 @@ def _capture_login_debug(page, reason: str):
             page.screenshot(path=str(screenshot_path), full_page=True)
             log.error("Pinterest login screenshot saved: %s", screenshot_path)
         except Exception as exc:
-            log.warning("Could not save Pinterest login screenshot: %s",
-                        type(exc).__name__)
+            log.warning(
+                "Could not save Pinterest login screenshot: %s",
+                type(exc).__name__
+            )
 
         # Serialize a sanitized DOM clone, not the live page. Remove scripts,
         # hidden inputs, metadata, sensitive attributes, field values, and
@@ -233,12 +239,17 @@ def _capture_login_debug(page, reason: str):
             html_path.write_text(safe_html, encoding="utf-8")
             log.error("Sanitized Pinterest login HTML saved: %s", html_path)
         except Exception as exc:
-            log.warning("Could not save sanitized Pinterest login HTML: %s",
-                        type(exc).__name__)
+            log.warning(
+                "Could not save sanitized Pinterest login HTML: %s",
+                type(exc).__name__
+            )
 
     except Exception as exc:
         # Diagnostics must never hide the original login exception.
-        log.warning("Pinterest login diagnostics failed: %s", type(exc).__name__)
+        log.warning(
+            "Pinterest login diagnostics failed: %s",
+            type(exc).__name__
+        )
 
 
 def _login(page):
@@ -262,13 +273,23 @@ def _login(page):
         login_submit.wait_for(state="visible", timeout=10000)
         login_submit.click(timeout=10000)
 
+        # Wait for Pinterest to respond to the login click.
         _wait_load(page, timeout=40000)
         page.wait_for_timeout(4000)
-        log.info(f"Post-login URL: {page.url}")
+        log.info("Post-login URL before verification: %s", page.url)
+
+        # Capture the exact post-click state BEFORE _is_logged_in()
+        # navigates to the homepage and changes the page being inspected.
+        _capture_login_debug(
+            page,
+            "post-click state before logged-in verification",
+            prefix="_debug_pinterest_post_click"
+        )
+
     except Exception as exc:
         _capture_login_debug(
             page,
-            f"{type(exc).__name__}: {str(exc)[:500]}"
+            f"login exception: {type(exc).__name__}: {str(exc)[:500]}"
         )
         raise
 
