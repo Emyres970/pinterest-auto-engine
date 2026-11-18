@@ -1,4 +1,4 @@
-
+ 
 name: Safely Reconcile PR 31
 
 on:
@@ -41,13 +41,23 @@ jobs:
             exit 1
           fi
 
-          git fetch origin main "$FEATURE_BRANCH"
+          git fetch origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/heads/feat/pinterest-headline-framework:refs/remotes/origin/feat/pinterest-headline-framework
 
           FEATURE_SHA="$(git rev-parse HEAD)"
+          REMOTE_FEATURE_SHA="$(git rev-parse origin/$FEATURE_BRANCH)"
           MAIN_SHA="$(git rev-parse origin/main)"
 
           echo "Feature branch starting commit: $FEATURE_SHA"
+          echo "Remote feature branch commit: $REMOTE_FEATURE_SHA"
           echo "Main branch commit to merge: $MAIN_SHA"
+
+          if [ "$FEATURE_SHA" != "$REMOTE_FEATURE_SHA" ]; then
+            echo "::error::The feature branch changed during checkout."
+            echo "Stopping to avoid overwriting newer work."
+            exit 1
+          fi
 
           echo "FEATURE_SHA=$FEATURE_SHA" >> "$GITHUB_ENV"
           echo "MAIN_SHA=$MAIN_SHA" >> "$GITHUB_ENV"
@@ -55,7 +65,6 @@ jobs:
 
           if git merge-base --is-ancestor "$MAIN_SHA" "$FEATURE_SHA"; then
             echo "Main is already included in the feature branch."
-            echo "Nothing needs to be merged."
             echo "ALREADY_UPDATED=true" >> "$GITHUB_ENV"
           else
             echo "ALREADY_UPDATED=false" >> "$GITHUB_ENV"
@@ -67,44 +76,60 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Configure Git BEFORE attempting the merge.
+          git config user.name "GitHub Actions"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
           echo "Merging main into the existing feature branch."
 
-          set +e
-          git merge --no-commit --no-ff "$MAIN_SHA"
-          MERGE_EXIT=$?
-          set -e
+          if git merge --no-commit --no-ff "$MAIN_SHA"; then
+            echo "Merge started successfully."
+          else
+            MERGE_EXIT=$?
 
-          if [ "$MERGE_EXIT" -ne 0 ]; then
-            CONFLICTS="$(git diff --name-only --diff-filter=U)"
+            # A failed merge command is not automatically a file conflict.
+            # Check whether Git actually created a merge operation.
+            MERGE_HEAD="$(git rev-parse --git-path MERGE_HEAD)"
 
-            echo "Git reported merge conflicts:"
-            echo "$CONFLICTS"
+            if [ ! -f "$MERGE_HEAD" ]; then
+              echo "::error::Git could not start the merge."
+              echo "This was not a tracker.csv conflict."
+              exit "$MERGE_EXIT"
+            fi
 
-            if [ "$CONFLICTS" != "tracker.csv" ]; then
-              echo "::error::A file other than tracker.csv is conflicted."
-              echo "No changes will be pushed."
+            mapfile -t CONFLICTS < <(
+              git diff --name-only --diff-filter=U
+            )
+
+            echo "Git reported these unresolved files:"
+            printf '%s\n' "${CONFLICTS[@]}"
+
+            if [ "${#CONFLICTS[@]}" -ne 1 ] || [ "${CONFLICTS[0]}" != "tracker.csv" ]; then
+              echo "::error::Unexpected merge conflict detected."
+              echo "Only tracker.csv is allowed to require reconciliation."
               git merge --abort || true
               exit 1
             fi
 
             echo "Only tracker.csv is conflicted."
-            echo "Proceeding with the protected CSV reconciliation."
+            echo "Proceeding with protected CSV reconciliation."
           fi
 
-          REMAINING="$(git diff --name-only --diff-filter=U)"
+          mapfile -t REMAINING < <(
+            git diff --name-only --diff-filter=U
+          )
 
-          if [ -n "$REMAINING" ] && [ "$REMAINING" != "tracker.csv" ]; then
-            echo "::error::Unexpected unresolved conflicts remain."
-            git merge --abort || true
-            exit 1
+          if [ "${#REMAINING[@]}" -gt 0 ]; then
+            if [ "${#REMAINING[@]}" -ne 1 ] || [ "${REMAINING[0]}" != "tracker.csv" ]; then
+              echo "::error::Unexpected unresolved conflicts remain."
+              git merge --abort || true
+              exit 1
+            fi
           fi
 
       - name: Combine and validate both tracker histories
         if: env.ALREADY_UPDATED != 'true'
         shell: bash
-        env:
-          FEATURE_SHA: ${{ env.FEATURE_SHA }}
-          MAIN_SHA: ${{ env.MAIN_SHA }}
         run: |
           set -euo pipefail
 
@@ -130,8 +155,8 @@ jobs:
               raw = subprocess.check_output(
                   ["git", "show", f"{commit}:tracker.csv"]
               )
-              content = raw.decode("utf-8-sig")
 
+              content = raw.decode("utf-8-sig")
               reader = csv.reader(io.StringIO(content, newline=""))
               records = list(reader)
 
@@ -166,23 +191,23 @@ jobs:
           print(f"Main branch records: {len(main_rows)}")
 
           # Preserve every distinct event from both branches.
-          # Only byte-for-byte equivalent CSV records are deduplicated.
+          # Only completely identical CSV records are deduplicated.
           unique = {}
+
           for row in feature_rows + main_rows:
               unique.setdefault(tuple(row), row)
 
           merged_rows = list(unique.values())
 
-          # tracker.py relies on the last successful event and recent
-          # headline history, so retain chronological event order.
+          # Keep event history in chronological order.
           merged_rows.sort(
               key=lambda row: datetime.fromisoformat(row[5])
           )
 
-          # Explicitly verify that successful feature-branch records
-          # for posts 36 and 38 survive reconciliation.
           merged_set = {tuple(row) for row in merged_rows}
 
+          # Explicitly protect successful feature-branch records
+          # for posts 36 and 38.
           for row in feature_rows:
               if row[0] in {"36", "38"} and row[6] == "success":
                   if tuple(row) not in merged_set:
@@ -191,7 +216,6 @@ jobs:
                           "was not preserved."
                       )
 
-          # Verify that no distinct source record has disappeared.
           source_set = {
               tuple(row) for row in feature_rows + main_rows
           }
@@ -213,7 +237,7 @@ jobs:
               newline="",
           )
 
-          # Read the actual written file again for final validation.
+          # Validate the actual written CSV again.
           with open(
               "tracker.csv",
               "r",
@@ -222,7 +246,7 @@ jobs:
           ) as file:
               check = list(csv.reader(file))
 
-          if check[0] != HEADERS:
+          if not check or check[0] != HEADERS:
               raise ValueError("Final tracker header validation failed.")
 
           if len(check) - 1 != len(merged_rows):
@@ -234,7 +258,7 @@ jobs:
           print(f"Distinct records preserved: {len(merged_rows)}")
           print("CSV structure: valid")
           print("Chronological order: verified")
-          print("Feature branch records 36 and 38: preserved")
+          print("Feature branch posts 36 and 38: protected")
           print("Tracker reconciliation completed.")
           PY
 
@@ -244,9 +268,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          REMAINING="$(git diff --name-only --diff-filter=U)"
+          mapfile -t REMAINING < <(
+            git diff --name-only --diff-filter=U
+          )
 
-          if [ -n "$REMAINING" ]; then
+          if [ "${#REMAINING[@]}" -gt 0 ]; then
             echo "::error::Unresolved conflicts remain."
             git merge --abort || true
             exit 1
@@ -254,10 +280,7 @@ jobs:
 
           git add tracker.csv
 
-          git diff --check
-
-          git config user.name "GitHub Actions"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git diff --cached --check
 
           echo "Prepared files for merge commit:"
           git status --short
