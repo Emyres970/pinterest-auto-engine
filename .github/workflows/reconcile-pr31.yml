@@ -1,4 +1,4 @@
- 
+
 name: Safely Reconcile PR 31
 
 on:
@@ -76,7 +76,6 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Configure Git BEFORE attempting the merge.
           git config user.name "GitHub Actions"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
@@ -87,8 +86,6 @@ jobs:
           else
             MERGE_EXIT=$?
 
-            # A failed merge command is not automatically a file conflict.
-            # Check whether Git actually created a merge operation.
             MERGE_HEAD="$(git rev-parse --git-path MERGE_HEAD)"
 
             if [ ! -f "$MERGE_HEAD" ]; then
@@ -190,8 +187,6 @@ jobs:
           print(f"Feature branch records: {len(feature_rows)}")
           print(f"Main branch records: {len(main_rows)}")
 
-          # Preserve every distinct event from both branches.
-          # Only completely identical CSV records are deduplicated.
           unique = {}
 
           for row in feature_rows + main_rows:
@@ -199,15 +194,12 @@ jobs:
 
           merged_rows = list(unique.values())
 
-          # Keep event history in chronological order.
           merged_rows.sort(
               key=lambda row: datetime.fromisoformat(row[5])
           )
 
           merged_set = {tuple(row) for row in merged_rows}
 
-          # Explicitly protect successful feature-branch records
-          # for posts 36 and 38.
           for row in feature_rows:
               if row[0] in {"36", "38"} and row[6] == "success":
                   if tuple(row) not in merged_set:
@@ -237,7 +229,6 @@ jobs:
               newline="",
           )
 
-          # Validate the actual written CSV again.
           with open(
               "tracker.csv",
               "r",
@@ -268,17 +259,22 @@ jobs:
         run: |
           set -euo pipefail
 
+          # IMPORTANT:
+          # Stage the reconciled CSV FIRST.
+          # This tells Git that the tracker conflict is resolved.
+          git add tracker.csv
+
+          # Now check whether any unresolved conflicts remain.
           mapfile -t REMAINING < <(
             git diff --name-only --diff-filter=U
           )
 
           if [ "${#REMAINING[@]}" -gt 0 ]; then
-            echo "::error::Unresolved conflicts remain."
+            echo "::error::Unresolved conflicts remain:"
+            printf '%s\n' "${REMAINING[@]}"
             git merge --abort || true
             exit 1
           fi
-
-          git add tracker.csv
 
           git diff --cached --check
 
