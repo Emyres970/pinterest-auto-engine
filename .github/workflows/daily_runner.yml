@@ -56,7 +56,7 @@ jobs:
           PINTEREST_BOARD_NAME: ${{ secrets.PINTEREST_BOARD_NAME }}
           BRAND_NAME: ${{ secrets.BRAND_NAME }}
           BRAND_URL: ${{ secrets.BRAND_URL }}
-          PINS_PER_DAY: 3
+          PINS_PER_DAY: 20
           DELAY_BETWEEN_PINS: 300
         run: python main.py
 
