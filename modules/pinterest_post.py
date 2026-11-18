@@ -1,3 +1,4 @@
+
 import os
 import json
 import logging
@@ -90,20 +91,207 @@ def _is_logged_in(page) -> bool:
         return False
 
 
+def _capture_login_debug(
+    page,
+    reason: str,
+    prefix: str = "_debug_pinterest_login_fail"
+):
+    """Save a privacy-conscious snapshot of Pinterest's current login state.
+
+    Field values, cookies, scripts, and token-like attributes are deliberately
+    excluded. The screenshot also hides editable fields before capture.
+    """
+    debug_dir = Path(__file__).parent.parent / "output"
+    debug_dir.mkdir(parents=True, exist_ok=True)
+    screenshot_path = debug_dir / f"{prefix}.png"
+    html_path = debug_dir / f"{prefix}.html"
+
+    try:
+        safe_url = page.url.split("?", 1)[0].split("#", 1)[0]
+        try:
+            page_title = page.title()
+        except Exception:
+            page_title = "<unavailable>"
+
+        log.error("Pinterest login diagnostic reason: %s", reason)
+        log.error("Pinterest login diagnostic URL: %s", safe_url)
+        log.error("Pinterest login diagnostic title: %s", page_title)
+
+        # Log only visible field metadata. Never read or log field values.
+        try:
+            fields = page.evaluate("""() => {
+                const visible = el => {
+                    const r = el.getBoundingClientRect();
+                    const s = getComputedStyle(el);
+                    return r.width > 0 && r.height > 0 &&
+                           s.visibility !== 'hidden' && s.display !== 'none';
+                };
+                return Array.from(document.querySelectorAll(
+                    'input, textarea, select, [contenteditable="true"]'
+                )).filter(visible).map(el => ({
+                    tag: el.tagName,
+                    id: el.id || '',
+                    name: el.getAttribute('name') || '',
+                    type: el.getAttribute('type') || '',
+                    placeholder: el.getAttribute('placeholder') || '',
+                    ariaLabel: el.getAttribute('aria-label') || '',
+                    testId: el.getAttribute('data-test-id') || ''
+                }));
+            }""")
+            log.error("Pinterest login visible field metadata: %s", fields)
+        except Exception as exc:
+            log.warning("Could not inspect login fields: %s", type(exc).__name__)
+
+        # Buttons help identify Pinterest's current login control without
+        # recording input values or other form contents.
+        try:
+            buttons = page.evaluate("""() => {
+                const visible = el => {
+                    const r = el.getBoundingClientRect();
+                    const s = getComputedStyle(el);
+                    return r.width > 0 && r.height > 0 &&
+                           s.visibility !== 'hidden' && s.display !== 'none';
+                };
+                return Array.from(document.querySelectorAll(
+                    'button, [role="button"], input[type="submit"]'
+                )).filter(visible).map(el => ({
+                    tag: el.tagName,
+                    text: (el.innerText || el.getAttribute('aria-label') || '')
+                        .trim().slice(0, 120),
+                    type: el.getAttribute('type') || '',
+                    ariaLabel: el.getAttribute('aria-label') || '',
+                    testId: el.getAttribute('data-test-id') || '',
+                    disabled: !!el.disabled
+                }));
+            }""")
+            log.error("Pinterest login visible buttons: %s", buttons)
+        except Exception as exc:
+            log.warning("Could not inspect login buttons: %s", type(exc).__name__)
+
+        # Capture a screenshot with editable fields hidden so credentials
+        # cannot appear in the image.
+        try:
+            page.add_style_tag(content="""
+                input, textarea, select, [contenteditable="true"] {
+                    visibility: hidden !important;
+                }
+            """)
+            page.screenshot(path=str(screenshot_path), full_page=True)
+            log.error("Pinterest login screenshot saved: %s", screenshot_path)
+        except Exception as exc:
+            log.warning(
+                "Could not save Pinterest login screenshot: %s",
+                type(exc).__name__
+            )
+
+        # Serialize a sanitized DOM clone, not the live page. Remove scripts,
+        # hidden inputs, metadata, sensitive attributes, field values, and
+        # email-like strings before writing the artifact.
+        try:
+            safe_html = page.evaluate("""() => {
+                const clone = document.documentElement.cloneNode(true);
+                clone.querySelectorAll(
+                    'script, noscript, meta, input[type="hidden"]'
+                ).forEach(el => el.remove());
+
+                const sensitive = /token|csrf|auth|session|password|cookie/i;
+                const walker = document.createTreeWalker(
+                    clone, NodeFilter.SHOW_ELEMENT
+                );
+                const elements = [clone];
+                while (walker.nextNode()) elements.push(walker.currentNode);
+
+                for (const el of elements) {
+                    for (const attr of Array.from(el.attributes || [])) {
+                        if (sensitive.test(attr.name)) {
+                            el.removeAttribute(attr.name);
+                        }
+                    }
+                    if (el.matches('input, textarea, select')) {
+                        el.removeAttribute('value');
+                        if (el.tagName === 'TEXTAREA') el.textContent = '';
+                        if (el.tagName === 'SELECT') {
+                            el.querySelectorAll('option').forEach(option => {
+                                option.removeAttribute('selected');
+                            });
+                        }
+                    }
+                    if (el.isContentEditable ||
+                        el.getAttribute('contenteditable') === 'true') {
+                        el.textContent = '[editable content redacted]';
+                    }
+                }
+
+                // Redact email-shaped strings in remaining visible page text.
+                const textWalker = document.createTreeWalker(
+                    clone, NodeFilter.SHOW_TEXT
+                );
+                const emailPattern =
+                    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}/gi;
+                while (textWalker.nextNode()) {
+                    const node = textWalker.currentNode;
+                    node.nodeValue = node.nodeValue.replace(
+                        emailPattern, '[email redacted]'
+                    );
+                }
+                return '<!DOCTYPE html>\\n' + clone.outerHTML;
+            }""")
+            html_path.write_text(safe_html, encoding="utf-8")
+            log.error("Sanitized Pinterest login HTML saved: %s", html_path)
+        except Exception as exc:
+            log.warning(
+                "Could not save sanitized Pinterest login HTML: %s",
+                type(exc).__name__
+            )
+
+    except Exception as exc:
+        # Diagnostics must never hide the original login exception.
+        log.warning(
+            "Pinterest login diagnostics failed: %s",
+            type(exc).__name__
+        )
+
+
 def _login(page):
     log.info("Logging into Pinterest...")
-    page.goto("https://www.pinterest.com/login/", timeout=30000)
-    _wait_load(page)
-    page.wait_for_timeout(2000)
+    try:
+        page.goto("https://www.pinterest.com/login/", timeout=30000)
+        _wait_load(page)
+        page.wait_for_timeout(2000)
 
-    page.locator('[id="email"]').fill(os.getenv("PINTEREST_EMAIL", ""))
-    page.wait_for_timeout(700)
-    page.locator('[id="password"]').fill(os.getenv("PINTEREST_PASSWORD", ""))
-    page.wait_for_timeout(700)
-    page.locator('[data-test-id="registerFormSubmitButton"]').click()
-    _wait_load(page, timeout=40000)
-    page.wait_for_timeout(4000)
-    log.info(f"Post-login URL: {page.url}")
+        page.locator('[id="email"]').fill(os.getenv("PINTEREST_EMAIL", ""))
+        page.wait_for_timeout(700)
+        page.locator('[id="password"]').fill(os.getenv("PINTEREST_PASSWORD", ""))
+        page.wait_for_timeout(700)
+
+        # Pinterest's current login DOM (verified from run #448 diagnostics)
+        # exposes one submit button inside the accessible login form. The old
+        # registerFormSubmitButton data-test-id is no longer present.
+        login_submit = page.locator(
+            'form[aria-label="login form"] button[type="submit"]'
+        )
+        login_submit.wait_for(state="visible", timeout=10000)
+        login_submit.click(timeout=10000)
+
+        # Wait for Pinterest to respond to the login click.
+        _wait_load(page, timeout=40000)
+        page.wait_for_timeout(4000)
+        log.info("Post-login URL before verification: %s", page.url)
+
+        # Capture the exact post-click state BEFORE _is_logged_in()
+        # navigates to the homepage and changes the page being inspected.
+        _capture_login_debug(
+            page,
+            "post-click state before logged-in verification",
+            prefix="_debug_pinterest_post_click"
+        )
+
+    except Exception as exc:
+        _capture_login_debug(
+            page,
+            f"login exception: {type(exc).__name__}: {str(exc)[:500]}"
+        )
+        raise
 
 
 def _upload_image(page, image_path: str):
@@ -621,7 +809,6 @@ def _select_board(page, board_name: str):
         f'div[role="option"]:has-text("{board_name}")',
         f'li:has-text("{board_name}")',
         f'button:has-text("{board_name}")',
-        # Generic: any element in the dropdown list containing the board name
         f'ul >> text="{board_name}"',
         f'[role="listbox"] >> text="{board_name}"',
     ]:
@@ -636,10 +823,7 @@ def _select_board(page, board_name: str):
             continue
 
     if not clicked:
-        # Last resort: click whatever is first in the result list (the search already
-        # filtered to the board name, so the first non-"Create board" item is ours)
         try:
-            # The board thumbnail image is always present — click its parent row
             result = page.locator('img[alt*="' + board_name + '" i]').first
             if result.count():
                 result.click(timeout=5000)
@@ -720,8 +904,6 @@ def post_pin(image_path: str, title: str, description: str, link: str, board_nam
         log.info(f"  Page URL  : {page.url}")
         _upload_image(page, image_path)
 
-        # If the account hit the 50-draft ceiling, bulk-delete all drafts then
-        # re-navigate and re-upload so the creation flow starts clean.
         if _clear_draft_limit(page):
             page.goto("https://www.pinterest.com/pin-creation-tool/", timeout=45000)
             _wait_load(page)

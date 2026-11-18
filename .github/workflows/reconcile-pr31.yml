@@ -1,0 +1,296 @@
+
+name: Safely Reconcile PR 31
+
+on:
+  push:
+    branches:
+      - feat/pinterest-headline-framework
+    paths:
+      - .github/workflows/reconcile-pr31.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: reconcile-pr31
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    name: Merge main into feature branch safely
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out the existing feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: feat/pinterest-headline-framework
+          fetch-depth: 0
+
+      - name: Fetch both branches and verify the starting point
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          FEATURE_BRANCH="feat/pinterest-headline-framework"
+
+          CURRENT_BRANCH="$(git branch --show-current)"
+
+          if [ "$CURRENT_BRANCH" != "$FEATURE_BRANCH" ]; then
+            echo "::error::Unexpected branch: $CURRENT_BRANCH"
+            exit 1
+          fi
+
+          git fetch origin \
+            +refs/heads/main:refs/remotes/origin/main \
+            +refs/heads/feat/pinterest-headline-framework:refs/remotes/origin/feat/pinterest-headline-framework
+
+          FEATURE_SHA="$(git rev-parse HEAD)"
+          REMOTE_FEATURE_SHA="$(git rev-parse origin/$FEATURE_BRANCH)"
+          MAIN_SHA="$(git rev-parse origin/main)"
+
+          echo "Feature branch starting commit: $FEATURE_SHA"
+          echo "Remote feature branch commit: $REMOTE_FEATURE_SHA"
+          echo "Main branch commit to merge: $MAIN_SHA"
+
+          if [ "$FEATURE_SHA" != "$REMOTE_FEATURE_SHA" ]; then
+            echo "::error::The feature branch changed during checkout."
+            echo "Stopping to avoid overwriting newer work."
+            exit 1
+          fi
+
+          echo "FEATURE_SHA=$FEATURE_SHA" >> "$GITHUB_ENV"
+          echo "MAIN_SHA=$MAIN_SHA" >> "$GITHUB_ENV"
+          echo "FEATURE_BRANCH=$FEATURE_BRANCH" >> "$GITHUB_ENV"
+
+          if git merge-base --is-ancestor "$MAIN_SHA" "$FEATURE_SHA"; then
+            echo "Main is already included in the feature branch."
+            echo "ALREADY_UPDATED=true" >> "$GITHUB_ENV"
+          else
+            echo "ALREADY_UPDATED=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Merge main without discarding feature branch work
+        if: env.ALREADY_UPDATED != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git config user.name "GitHub Actions"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          echo "Merging main into the existing feature branch."
+
+          if git merge --no-commit --no-ff "$MAIN_SHA"; then
+            echo "Merge started successfully."
+          else
+            MERGE_EXIT=$?
+
+            MERGE_HEAD="$(git rev-parse --git-path MERGE_HEAD)"
+
+            if [ ! -f "$MERGE_HEAD" ]; then
+              echo "::error::Git could not start the merge."
+              echo "This was not a tracker.csv conflict."
+              exit "$MERGE_EXIT"
+            fi
+
+            mapfile -t CONFLICTS < <(
+              git diff --name-only --diff-filter=U
+            )
+
+            echo "Git reported these unresolved files:"
+            printf '%s\n' "${CONFLICTS[@]}"
+
+            if [ "${#CONFLICTS[@]}" -ne 1 ] || [ "${CONFLICTS[0]}" != "tracker.csv" ]; then
+              echo "::error::Unexpected merge conflict detected."
+              echo "Only tracker.csv is allowed to require reconciliation."
+              git merge --abort || true
+              exit 1
+            fi
+
+            echo "Only tracker.csv is conflicted."
+            echo "Proceeding with protected CSV reconciliation."
+          fi
+
+          mapfile -t REMAINING < <(
+            git diff --name-only --diff-filter=U
+          )
+
+          if [ "${#REMAINING[@]}" -gt 0 ]; then
+            if [ "${#REMAINING[@]}" -ne 1 ] || [ "${REMAINING[0]}" != "tracker.csv" ]; then
+              echo "::error::Unexpected unresolved conflicts remain."
+              git merge --abort || true
+              exit 1
+            fi
+          fi
+
+      - name: Combine and validate both tracker histories
+        if: env.ALREADY_UPDATED != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          python - <<'PY'
+          import csv
+          import io
+          import os
+          import subprocess
+          from datetime import datetime
+          from pathlib import Path
+
+          HEADERS = [
+              "post_index",
+              "title",
+              "url",
+              "headline",
+              "image_path",
+              "date_posted",
+              "status",
+          ]
+
+          def read_tracker(commit):
+              raw = subprocess.check_output(
+                  ["git", "show", f"{commit}:tracker.csv"]
+              )
+
+              content = raw.decode("utf-8-sig")
+              reader = csv.reader(io.StringIO(content, newline=""))
+              records = list(reader)
+
+              if not records or records[0] != HEADERS:
+                  raise ValueError(
+                      f"Unexpected tracker.csv header in {commit}"
+                  )
+
+              rows = records[1:]
+
+              for number, row in enumerate(rows, start=2):
+                  if len(row) != len(HEADERS):
+                      raise ValueError(
+                          f"Invalid column count at line {number} "
+                          f"in tracker from {commit}"
+                      )
+
+                  if not row[5]:
+                      raise ValueError(
+                          f"Missing date_posted at line {number} "
+                          f"in tracker from {commit}"
+                      )
+
+                  datetime.fromisoformat(row[5])
+
+              return rows
+
+          feature_rows = read_tracker(os.environ["FEATURE_SHA"])
+          main_rows = read_tracker(os.environ["MAIN_SHA"])
+
+          print(f"Feature branch records: {len(feature_rows)}")
+          print(f"Main branch records: {len(main_rows)}")
+
+          unique = {}
+
+          for row in feature_rows + main_rows:
+              unique.setdefault(tuple(row), row)
+
+          merged_rows = list(unique.values())
+
+          merged_rows.sort(
+              key=lambda row: datetime.fromisoformat(row[5])
+          )
+
+          merged_set = {tuple(row) for row in merged_rows}
+
+          for row in feature_rows:
+              if row[0] in {"36", "38"} and row[6] == "success":
+                  if tuple(row) not in merged_set:
+                      raise ValueError(
+                          f"Feature success record for post {row[0]} "
+                          "was not preserved."
+                      )
+
+          source_set = {
+              tuple(row) for row in feature_rows + main_rows
+          }
+
+          if merged_set != source_set:
+              raise ValueError(
+                  "The merged tracker does not contain every "
+                  "distinct source record."
+              )
+
+          output = io.StringIO(newline="")
+          writer = csv.writer(output, lineterminator="\n")
+          writer.writerow(HEADERS)
+          writer.writerows(merged_rows)
+
+          Path("tracker.csv").write_text(
+              output.getvalue(),
+              encoding="utf-8",
+              newline="",
+          )
+
+          with open(
+              "tracker.csv",
+              "r",
+              encoding="utf-8",
+              newline="",
+          ) as file:
+              check = list(csv.reader(file))
+
+          if not check or check[0] != HEADERS:
+              raise ValueError("Final tracker header validation failed.")
+
+          if len(check) - 1 != len(merged_rows):
+              raise ValueError("Final tracker row count is incorrect.")
+
+          if any(len(row) != 7 for row in check[1:]):
+              raise ValueError("Final tracker contains malformed rows.")
+
+          print(f"Distinct records preserved: {len(merged_rows)}")
+          print("CSV structure: valid")
+          print("Chronological order: verified")
+          print("Feature branch posts 36 and 38: protected")
+          print("Tracker reconciliation completed.")
+          PY
+
+      - name: Verify merge and prepare commit
+        if: env.ALREADY_UPDATED != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # IMPORTANT:
+          # Stage the reconciled CSV FIRST.
+          # This tells Git that the tracker conflict is resolved.
+          git add tracker.csv
+
+          # Now check whether any unresolved conflicts remain.
+          mapfile -t REMAINING < <(
+            git diff --name-only --diff-filter=U
+          )
+
+          if [ "${#REMAINING[@]}" -gt 0 ]; then
+            echo "::error::Unresolved conflicts remain:"
+            printf '%s\n' "${REMAINING[@]}"
+            git merge --abort || true
+            exit 1
+          fi
+
+          git diff --cached --check
+
+          echo "Prepared files for merge commit:"
+          git status --short
+
+          git commit -m "Merge main into feat/pinterest-headline-framework"
+
+      - name: Push the updated feature branch
+        if: env.ALREADY_UPDATED != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          git push origin \
+            HEAD:refs/heads/feat/pinterest-headline-framework
+
+          echo "Updated feature branch pushed successfully."
+          echo "Main branch was not modified."
